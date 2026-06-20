@@ -13,7 +13,7 @@ class RunIn(BaseModel):
     intent: str
     target_module: str = "mcp_fs"
     domain: str = "modules"
-    base: str = "http://127.0.0.1:8001"
+    base: str | None = None   # defaults to the core's own port (self)
 
 
 class RollbackIn(BaseModel):

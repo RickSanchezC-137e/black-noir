@@ -81,7 +81,8 @@ async def scout(intent: str, *, domain: str = "modules", target_module: str = "m
 
 
 async def run_once(intent: str, *, target_module: str = "mcp_fs", domain: str = "modules",
-                   base: str = "http://127.0.0.1:8001") -> dict:
+                   base: str | None = None) -> dict:
+    base = base or f"http://127.0.0.1:{settings.api_port}"
     """One full loop iteration: scout -> build -> eval gate -> governor gate -> promote/reject."""
     sc = await scout(intent, domain=domain, target_module=target_module)
     hid = sc["hypothesis_id"]
