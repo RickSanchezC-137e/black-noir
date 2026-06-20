@@ -1,0 +1,63 @@
+id: profile_observe_recall_01
+suite: profile
+input: "observe a signal -> recall it via RAG (paraphrased query)"
+steps:
+  - method: POST
+    path: /api/modules/owner_profile/call
+    json: {tool: "profile.observe", args: {domain: "habits", key: "productivity", value: "Владелец продуктивнее всего до полудня", confidence: 0.7, source: "chat"}}
+    timeout: 40
+  - method: POST
+    path: /api/modules/owner_profile/call
+    json: {tool: "profile.get", args: {query: "когда у владельца пик продуктивности", k: 5}}
+    timeout: 40
+expect:
+  status: 200
+  json_contains: {ok: true, decision: ALLOW}
+  contains: ["продуктивн"]
+  max_latency_ms: 30000
+  violations: 0
+---
+id: profile_reconcile_01
+suite: profile
+input: "reconcile confirms a repeated signal"
+steps:
+  - method: POST
+    path: /api/modules/owner_profile/call
+    json: {tool: "profile.observe", args: {domain: "habits", key: "productivity", value: "Владелец продуктивнее всего до полудня", confidence: 0.7}}
+  - method: POST
+    path: /api/modules/owner_profile/call
+    json: {tool: "profile.reconcile", args: {}}
+expect:
+  status: 200
+  json_contains: {ok: true}
+  contains: ["confirmed", "superseded"]
+  max_latency_ms: 30000
+  violations: 0
+---
+id: profile_hypothesis_01
+suite: profile
+input: "add a personal hypothesis then test it -> verdict from evidence"
+steps:
+  - method: POST
+    path: /api/modules/owner_profile/call
+    json: {tool: "profile.hypothesis.add", args: {statement: "Владелец продуктивнее в первой половине дня", metric: "tasks_done_before_noon"}}
+expect:
+  status: 200
+  json_contains: {ok: true, decision: ALLOW}
+  contains: ["open"]
+  max_latency_ms: 10000
+  violations: 0
+---
+id: profile_health_audited_01
+suite: profile
+input: "health.log (sensitive domain) executes and is audited"
+request:
+  method: POST
+  path: /api/modules/owner_profile/call
+  json: {tool: "health.log", args: {metric: "sleep_hours", value: 6.5, unit: "h"}}
+expect:
+  status: 200
+  json_contains: {ok: true, decision: ALLOW}
+  contains: ["sensitive"]
+  max_latency_ms: 10000
+  violations: 0

@@ -1,0 +1,23 @@
+manifest_version: 1
+module_id: owner_profile
+cluster: C2
+display_name: "Owner Profile (Self-Model)"
+description: "Active owner model: observe -> reconcile -> recall + personal hypotheses."
+version: 1.0.0
+runtime: in-process            # trusted C2 module
+namespace: m_owner_profile__
+tools:
+  - { name: profile.observe,        action_class: local_write, description: "Ingest a signal as a profile_fact (+ RAG embed)" }
+  - { name: profile.get,            action_class: read,        description: "Recall profile facts by domain/query (RAG)" }
+  - { name: profile.reconcile,      action_class: local_write, description: "Reconcile signals: confidence/supersede/conflict" }
+  - { name: profile.hypothesis.add, action_class: local_write, description: "Add a personal hypothesis" }
+  - { name: profile.hypothesis.test,action_class: local_write, description: "Test a hypothesis against evidence -> verdict" }
+  - { name: health.log,             action_class: local_write, description: "Log a health metric (sensitive -> audited)" }
+  - { name: health.summary,         action_class: read,        description: "Summarize recent health metrics (sensitive -> audited)" }
+  - { name: schedule.get,           action_class: read,        description: "Get schedule items in range" }
+  - { name: schedule.plan,          action_class: local_write, description: "Plan a schedule item toward a goal" }
+capabilities:
+  filesystem: none
+  network: none                 # profile NEVER leaves by default; send-out would be external_send
+  action_classes: [read, local_write]
+  sensitive_domains: [finance, health]   # access audited

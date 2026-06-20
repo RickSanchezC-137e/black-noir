@@ -20,17 +20,32 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def get_embedder():
+    """Shared sentence-transformers embedder (all-MiniLM-L6-v2). Loaded once, reused
+    by core memory and private module collections (e.g. owner_profile) to save RAM."""
+    global _embedder
+    if _embedder is None:
+        from sentence_transformers import SentenceTransformer
+        _embedder = SentenceTransformer(settings.embedding_model)
+    return _embedder
+
+
+def get_chroma():
+    """Shared Chroma persistent client."""
+    global _chroma
+    if _chroma is None:
+        import chromadb
+        _chroma = chromadb.PersistentClient(path=str(settings.chroma_dir))
+    return _chroma
+
+
 def _ensure_chroma():
-    """Lazy import of heavy deps (chromadb + sentence-transformers)."""
-    global _chroma, _embedder, _collection
+    """Lazy init of the core long-term memory collection."""
+    global _collection
     if _collection is not None:
         return _collection
-    import chromadb
-    from sentence_transformers import SentenceTransformer
-
-    _embedder = SentenceTransformer(settings.embedding_model)
-    _chroma = chromadb.PersistentClient(path=str(settings.chroma_dir))
-    _collection = _chroma.get_or_create_collection("memory_longterm")
+    get_embedder()
+    _collection = get_chroma().get_or_create_collection("memory_longterm")
     return _collection
 
 
