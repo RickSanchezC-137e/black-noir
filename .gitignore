@@ -27,3 +27,4 @@ __pycache__/
 
 # --- Buildlog: keep docs, ignore raw dumps ---
 _buildlog/*.txt
+_buildlog/*.log
