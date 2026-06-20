@@ -1,32 +1,33 @@
-# Caddy reverse proxy для Black Noir — HTTPS на голом IP (без домена).
-#
-# tls internal — Caddy выпускает самоподписанный сертификат своим локальным CA.
-# Браузер один раз покажет предупреждение — после «Перейти всё равно» страница
-# работает по HTTPS, контекст защищён, getUserMedia (микрофон) доступен удалённо.
-# HTTP (80) автоматически редиректит на HTTPS (443).
-# Ядро noir-core слушает localhost:8000.
+# Caddy reverse proxy для Black Noir. Ядро noir-core слушает localhost:8000.
+#  • jarvisgod.duckdns.org — НАСТОЯЩИЙ Let's Encrypt cert (домен -> 89.208.97.41, 80/443 открыты).
+#    Десктоп-клиент ходит сюда (доверенный TLS). Токен DuckDNS не нужен (IP статический).
+#  • 89.208.97.41 — голый IP, самоподписанный cert (tls internal), для прямого доступа.
 
-89.208.97.41 {
-	tls internal
-
-	# --- Базовая защита от ботов ------------------------------------------
+jarvisgod.duckdns.org {
 	@no_ua {
 		not header User-Agent *
 	}
 	respond @no_ua "Forbidden" 403 {
 		close
 	}
-
 	@bad_agents header_regexp User-Agent (?i)(nikto|sqlmap|nmap|masscan|zgrab|nuclei|fimap|dirbuster|gobuster|wpscan|petalbot|semrushbot|ahrefsbot|mj12bot|dotbot|bytespider|censys|zoominfobot)
 	respond @bad_agents "Forbidden" 403 {
 		close
 	}
-
 	@probe_paths path /.env /.git/* /wp-admin* /wp-login.php /phpmyadmin* /.aws/* /vendor/* /xmlrpc.php
 	respond @probe_paths "Not Found" 404 {
 		close
 	}
-	# ---------------------------------------------------------------------
+	reverse_proxy localhost:8000
+}
 
+89.208.97.41 {
+	tls internal
+	@no_ua2 {
+		not header User-Agent *
+	}
+	respond @no_ua2 "Forbidden" 403 {
+		close
+	}
 	reverse_proxy localhost:8000
 }

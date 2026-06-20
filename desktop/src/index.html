@@ -87,7 +87,9 @@ h2{margin:.2em 0 .6em;color:var(--accent);font-size:13px;letter-spacing:2px}
 <script>
 // API base: VITE_API_BASE (build) or window.NOIR_API_BASE (runtime/test) or query ?api=
 const params=new URLSearchParams(location.search);
-const API=(params.get("api")||window.NOIR_API_BASE||(window.__VITE_API_BASE__)||"http://127.0.0.1:8000").replace(/\/$/,"");
+// Core URL: ?api= override > runtime NOIR_API_BASE > build-time VITE_API_BASE > deploy default.
+// Default is the trusted-TLS domain (real Let's Encrypt) so the installed app connects out-of-box.
+const API=(params.get("api")||window.NOIR_API_BASE||(window.__VITE_API_BASE__)||"https://jarvisgod.duckdns.org").replace(/\/$/,"");
 const WS=API.replace(/^http/,"ws");
 const $=s=>document.querySelector(s); const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
 const CLUSTERS={C1:"C1 ВЗАИМОДЕЙСТВИЕ",C2:"C2 ПАМЯТЬ",C3:"C3 ВОСПРИЯТИЕ",C4:"САМОУЛУЧШЕНИЕ",C5:"C5 БЕЗОПАСНОСТЬ",C6:"C6 ИНСТРУМЕНТЫ"};

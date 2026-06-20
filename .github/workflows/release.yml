@@ -37,6 +37,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Core URL baked into the HUD at build time (trusted-TLS domain). Override via repo
+          # variable VITE_API_BASE if the domain changes (Settings -> Variables -> Actions).
+          VITE_API_BASE: ${{ vars.VITE_API_BASE || 'https://jarvisgod.duckdns.org' }}
           # Add these in repo Settings -> Secrets and variables -> Actions:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
