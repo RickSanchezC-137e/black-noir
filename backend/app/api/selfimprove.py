@@ -25,6 +25,12 @@ async def status():
     return await selfimprove.status()
 
 
+@router.post("/scout")
+async def scout():
+    """Autonomous Scout tick (driven by noir-scout.timer)."""
+    return await selfimprove.scout_cycle()
+
+
 @router.post("/run")
 async def run(body: RunIn):
     """One self-improvement iteration: scout->build->eval gate->governor->promote/reject."""

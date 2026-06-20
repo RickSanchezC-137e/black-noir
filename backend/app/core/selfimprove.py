@@ -66,24 +66,73 @@ async def scout(intent: str, *, domain: str = "modules", target_module: str = "m
     """Synthesize + enqueue a hypothesis (dedup by signature). Deterministic for a given intent."""
     sig = _signature(domain, kind, intent)
     hid = f"hyp_{uuid.uuid4().hex[:10]}"
+    import sqlite3
     async with aiosqlite.connect(settings.sqlite_path) as db:
         dup = await (await db.execute("SELECT id FROM si_hypotheses WHERE signature=?", (sig,))).fetchone()
         if dup:
             return {"hypothesis_id": dup[0], "duplicate": True}
-        await db.execute(
-            "INSERT INTO si_hypotheses(id,created_at,source,kind,domain,intent,summary,evidence,"
-            "impact,confidence,cost,priority,signature,contour,status) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (hid, _now(), source, kind, domain, intent, intent, json.dumps([f"module:{target_module}"]),
-             0.6, 0.6, 0.3, 0.6 * 0.6 / 0.3, sig, "structural", "queued"))
-        await db.commit()
+        try:
+            await db.execute(
+                "INSERT INTO si_hypotheses(id,created_at,source,kind,domain,intent,summary,evidence,"
+                "impact,confidence,cost,priority,signature,contour,status) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (hid, _now(), source, kind, domain, intent, intent, json.dumps([f"module:{target_module}"]),
+                 0.6, 0.6, 0.3, 0.6 * 0.6 / 0.3, sig, "structural", "queued"))
+            await db.commit()
+        except sqlite3.IntegrityError:
+            # concurrent tick won the race on this signature — treat as duplicate
+            row = await (await db.execute("SELECT id FROM si_hypotheses WHERE signature=?", (sig,))).fetchone()
+            return {"hypothesis_id": row[0] if row else hid, "duplicate": True}
     return {"hypothesis_id": hid, "duplicate": False, "target_module": target_module}
+
+
+INSTALLED_MODULES = {"mcp_fs", "mcp_shell", "mcp_search", "mcp_voice", "owner_profile"}
+SCOUT_DAILY_CAP = 12
+
+
+async def scout_cycle() -> dict:
+    """Autonomous Scout tick (24/7 via timer). Collects REAL signals from the audit log
+    (allowed-but-failed executions), synthesizes a hardening hypothesis, and runs it through
+    the full loop. Dedup signature includes today's date+module => at most one run per
+    module per day (cheap budget; no Claude in the loop)."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        # budget: cap hypotheses created today
+        made = (await (await db.execute(
+            "SELECT COUNT(*) FROM si_hypotheses WHERE substr(created_at,1,10)=?", (today,))).fetchone())[0]
+        if made >= SCOUT_DAILY_CAP:
+            return {"scouted": False, "reason": f"daily cap {SCOUT_DAILY_CAP} reached", "today": today}
+        # signal: genuine execution failures (Governor ALLOWed but ok=0), last 24h, by module
+        since = (datetime.now(timezone.utc).replace(microsecond=0)).isoformat()[:10]
+        rows = await (await db.execute(
+            "SELECT module, COUNT(*) n FROM agent_log WHERE decision='ALLOW' AND ok=0"
+            " AND substr(created_at,1,10)>=? AND module NOT IN ('selfimprove','test')"
+            " GROUP BY module ORDER BY n DESC", (since,))).fetchall()
+    signals = [(r["module"], r["n"]) for r in rows if r["module"] in INSTALLED_MODULES]
+    if not signals:
+        return {"scouted": False, "reason": "no actionable signals", "today": today}
+
+    module, n = signals[0]
+    # Intent is STABLE per module/day (no count) so the daily dedup actually holds.
+    intent = f"[{today}] harden {module} after recent execution failures"
+    # Scout budget: skip if this exact signal was already scouted today (dedup by signature).
+    sig = _signature(module, "capability", intent)
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        exists = await (await db.execute(
+            "SELECT 1 FROM si_hypotheses WHERE signature=?", (sig,))).fetchone()
+    if exists:
+        return {"scouted": False, "reason": "already scouted today (dedup)", "module": module}
+    res = await run_once(intent, target_module=module, domain=module)
+    return {"scouted": True, "module": module, "signals": signals, **res}
 
 
 async def run_once(intent: str, *, target_module: str = "mcp_fs", domain: str = "modules",
                    base: str | None = None) -> dict:
     base = base or f"http://127.0.0.1:{settings.api_port}"
     """One full loop iteration: scout -> build -> eval gate -> governor gate -> promote/reject."""
+    # /run is idempotent: a repeated intent re-evaluates the existing hypothesis (Scout's
+    # once-per-day budget is enforced in scout_cycle, not here).
     sc = await scout(intent, domain=domain, target_module=target_module)
     hid = sc["hypothesis_id"]
 

@@ -1,0 +1,13 @@
+# /etc/systemd/system/noir-scout.timer
+# 24/7 Scout cadence (09_self_improvement.md §13: Scout cycle every 30 min).
+[Unit]
+Description=Black Noir Scout cadence (every 30 min)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+RandomizedDelaySec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

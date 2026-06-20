@@ -1,0 +1,13 @@
+# /etc/systemd/system/noir-scout.service
+# Oneshot Scout tick (C4 self-improvement). Driven by noir-scout.timer (every 30 min).
+[Unit]
+Description=Black Noir Scout tick (self-improvement cycle)
+After=noir-core.service
+Requires=noir-core.service
+
+[Service]
+Type=oneshot
+User=jarvis
+Group=jarvis
+# Thin call into the core; the loop (Factory+Eval gate+Governor) runs server-side.
+ExecStart=/usr/bin/curl -fsS -m 200 -X POST http://127.0.0.1:8000/api/systems/selfimprove/scout
