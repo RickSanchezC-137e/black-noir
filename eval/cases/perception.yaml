@@ -1,0 +1,18 @@
+id: voice_roundtrip_01
+suite: perception
+input: "REAL audio roundtrip: Piper TTS -> wav -> faster-whisper STT (no mock, no synthetic)"
+steps:
+  - method: POST
+    path: /api/modules/mcp_voice/call
+    json: {tool: "voice.speak", args: {text: "Это проверка голосового модуля Нуар", out: "eval_probe.wav"}}
+    timeout: 60
+  - method: POST
+    path: /api/modules/mcp_voice/call
+    json: {tool: "voice.transcribe", args: {path: "eval_probe.wav", language: "ru"}}
+    timeout: 90
+expect:
+  status: 200
+  json_contains: {ok: true, decision: ALLOW}
+  contains: ["проверк"]
+  max_latency_ms: 60000
+  violations: 0

@@ -1,0 +1,15 @@
+manifest_version: 1
+module_id: mcp_voice
+cluster: C3
+display_name: "Voice (STT/TTS)"
+description: "perception-hearing: faster-whisper STT + Piper TTS, local on CPU."
+version: 1.0.0
+runtime: in-process
+namespace: m_mcp_voice__
+tools:
+  - { name: voice.speak,      action_class: local_write, description: "Piper TTS: text -> wav file" }
+  - { name: voice.transcribe, action_class: read,        description: "faster-whisper STT: wav -> text" }
+capabilities:
+  filesystem: read-write        # sandbox wav files
+  network: none
+  action_classes: [read, local_write]
