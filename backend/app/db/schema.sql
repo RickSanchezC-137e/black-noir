@@ -57,6 +57,31 @@ CREATE TABLE IF NOT EXISTS agent_log (
 );
 CREATE INDEX IF NOT EXISTS idx_agentlog_module ON agent_log(module, created_at);
 
+-- Self-improvement contour (C4, 09_self_improvement.md §12), si_ namespace
+CREATE TABLE IF NOT EXISTS si_hypotheses (
+    id TEXT PRIMARY KEY, created_at TEXT NOT NULL, source TEXT NOT NULL, kind TEXT NOT NULL,
+    domain TEXT NOT NULL, intent TEXT NOT NULL, summary TEXT NOT NULL, evidence TEXT,
+    impact REAL, confidence REAL, cost REAL, priority REAL, signature TEXT NOT NULL,
+    contour TEXT NOT NULL, status TEXT NOT NULL, experiment_id TEXT, verdict_id TEXT,
+    archived_reason TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_si_hyp_signature ON si_hypotheses(signature);
+CREATE TABLE IF NOT EXISTS si_experiments (
+    id TEXT PRIMARY KEY, hypothesis_id TEXT NOT NULL, domain TEXT NOT NULL,
+    constitution TEXT NOT NULL, eval TEXT NOT NULL, status TEXT NOT NULL,
+    started_at TEXT, finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS si_verdicts (
+    id TEXT PRIMARY KEY, experiment_id TEXT NOT NULL, decision TEXT NOT NULL, contour TEXT NOT NULL,
+    constitution_passed INTEGER NOT NULL, governor TEXT NOT NULL, quality_gate TEXT NOT NULL,
+    decided_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS si_versions (
+    domain TEXT NOT NULL, version INTEGER NOT NULL, experiment_id TEXT,
+    rollback_token TEXT NOT NULL UNIQUE, active INTEGER NOT NULL, created_at TEXT NOT NULL,
+    PRIMARY KEY (domain, version)
+);
+
 -- Ideas (C4 idea bot / generator)
 CREATE TABLE IF NOT EXISTS ideas (
     id          TEXT PRIMARY KEY,
