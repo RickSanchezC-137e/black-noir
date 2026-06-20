@@ -1,0 +1,27 @@
+id: bot_getme_01
+suite: bot
+input: "Telegram escalation channel is live (getMe returns the bot identity)"
+request:
+  method: GET
+  path: /api/ideas/bot
+  timeout: 20
+expect:
+  status: 200
+  contains: ["username", "is_bot"]
+  max_latency_ms: 15000
+  violations: 0
+---
+id: ideas_generate_01
+suite: ideas
+input: "ideas generator returns >=1 relevant initiative from memory+Claude"
+request:
+  method: POST
+  path: /api/ideas/generate
+  json: {n: 2, topic: "Rust системные утилиты владельца"}
+  timeout: 60
+expect:
+  status: 200
+  json_has_keys: [ideas]
+  contains: ["id", "status"]
+  max_latency_ms: 45000
+  violations: 0

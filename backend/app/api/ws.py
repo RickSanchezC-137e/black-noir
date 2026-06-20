@@ -28,12 +28,36 @@ async def ws_chat(ws: WebSocket):
         return
 
 
-@router.websocket("/ws/activity")
-async def ws_activity(ws: WebSocket):
+async def _hold(ws: WebSocket, name: str):
     await ws.accept()
     try:
-        await ws.send_json({"type": "hello", "data": "activity stream"})
+        await ws.send_json({"type": "hello", "data": name})
         while True:
             await ws.receive_text()
     except WebSocketDisconnect:
         return
+
+
+@router.websocket("/ws/activity")
+async def ws_activity(ws: WebSocket):
+    await _hold(ws, "activity stream")
+
+
+@router.websocket("/ws/ideas")
+async def ws_ideas(ws: WebSocket):
+    await _hold(ws, "ideas stream")
+
+
+@router.websocket("/ws/notify")
+async def ws_notify(ws: WebSocket):
+    await _hold(ws, "notify stream")
+
+
+@router.websocket("/ws/tasks")
+async def ws_tasks(ws: WebSocket):
+    await _hold(ws, "tasks stream")
+
+
+@router.websocket("/ws/logs")
+async def ws_logs(ws: WebSocket):
+    await _hold(ws, "logs stream")

@@ -57,6 +57,15 @@ CREATE TABLE IF NOT EXISTS agent_log (
 );
 CREATE INDEX IF NOT EXISTS idx_agentlog_module ON agent_log(module, created_at);
 
+-- Ideas (C4 idea bot / generator)
+CREATE TABLE IF NOT EXISTS ideas (
+    id          TEXT PRIMARY KEY,
+    text        TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'new',   -- new|review|backlog|active|done|rejected|cold
+    score       REAL,
+    created_at  TEXT NOT NULL
+);
+
 -- Episodic memory (CANON §10: episodic -> SQLite). Vector lives in Chroma via chroma_id.
 CREATE TABLE IF NOT EXISTS episodic (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
