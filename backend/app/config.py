@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     telegram_bot_token: str = ""
     telegram_owner_chat_id: str = ""
+    telegram_allowed_user_ids: str = ""
+    telegram_notify_secret: str = ""
     github_token: str = ""
 
     # Network

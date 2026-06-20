@@ -1,0 +1,23 @@
+# /etc/systemd/system/noir-bot.service
+# Telegram bot (C1) — command polling + Governor escalation channel. Always-on (Rule 3).
+[Unit]
+Description=Black Noir Telegram bot (long-polling)
+After=network-online.target noir-core.service
+Wants=network-online.target
+Requires=noir-core.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=jarvis
+Group=jarvis
+WorkingDirectory=/home/jarvis/noir/backend
+ExecStart=/home/jarvis/noir/backend/.venv/bin/python -m app.bot.run
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=noir-bot
+
+[Install]
+WantedBy=multi-user.target
