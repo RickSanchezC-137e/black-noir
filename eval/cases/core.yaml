@@ -1,0 +1,24 @@
+id: core_health_01
+suite: core
+input: "core comes up and reports ok"
+request:
+  method: GET
+  path: /api/core
+expect:
+  status: 200
+  json_contains: {status: ok}
+  contains: ["Black Noir", "claude-opus-4-8"]
+  max_latency_ms: 2000
+  violations: 0
+---
+id: systems_hardware_01
+suite: core
+input: "hardware profile is real (Rule 7), not demo"
+request:
+  method: GET
+  path: /api/systems
+expect:
+  status: 200
+  contains: ["cpu_cores", "ram_mb", "all-MiniLM-L6-v2"]
+  max_latency_ms: 2000
+  violations: 0

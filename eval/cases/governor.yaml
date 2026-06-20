@@ -1,0 +1,47 @@
+id: gov_allow_read_01
+suite: governor
+input: "read class is auto-allowed"
+request:
+  method: POST
+  path: /api/governor/check
+  json: {action_class: read, tool: fs_read}
+expect:
+  status: 200
+  json_contains: {decision: ALLOW}
+  max_latency_ms: 2000
+---
+id: gov_confirm_money_01
+suite: governor
+input: "money over auto-limit escalates to CONFIRM"
+request:
+  method: POST
+  path: /api/governor/check
+  json: {action_class: money, tool: pay, amount_usd: 120}
+expect:
+  status: 200
+  json_contains: {decision: CONFIRM}
+  max_latency_ms: 2000
+---
+id: gov_deny_money_cap_01
+suite: governor
+input: "money over daily cap is DENIED"
+request:
+  method: POST
+  path: /api/governor/check
+  json: {action_class: money, tool: pay, amount_usd: 500}
+expect:
+  status: 200
+  json_contains: {decision: DENY}
+  max_latency_ms: 2000
+---
+id: gov_kill_constitution_01
+suite: governor
+input: "attempt to modify constitution triggers KILL (immutable)"
+request:
+  method: POST
+  path: /api/governor/check
+  json: {action_class: self_modify, tool: edit_governor, targets_constitution: true}
+expect:
+  status: 200
+  json_contains: {decision: KILL}
+  max_latency_ms: 2000

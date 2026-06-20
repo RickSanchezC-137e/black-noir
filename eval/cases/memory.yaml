@@ -1,0 +1,16 @@
+id: mem_recall_01
+suite: memory
+input: "remember -> recall returns the relevant fact (k=5, ChromaDB)"
+steps:
+  - method: POST
+    path: /api/memory/remember
+    json: {text: "Владелец просил подготовить отчёт по продажам к пятнице", source: chat, role: user}
+  - method: GET
+    path: /api/memory/recall
+    query: {q: "что просил владелец про отчёт", k: 5}
+    timeout: 40
+expect:
+  status: 200
+  contains: ["отчёт"]
+  max_latency_ms: 30000
+  violations: 0

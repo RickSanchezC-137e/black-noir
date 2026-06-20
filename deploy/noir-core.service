@@ -1,0 +1,26 @@
+# /etc/systemd/system/noir-core.service
+# Autonomy (Rule 3): always-on, infinite restart + watchdog (>= old Jarvis).
+# NOT enabled until old Jarvis is decommissioned (it holds :8000). See build plan Step 5.
+[Unit]
+Description=Black Noir core (FastAPI/uvicorn) — noir-core
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=jarvis
+Group=jarvis
+WorkingDirectory=/home/jarvis/noir/backend
+# secrets/.env is read by the app (pydantic-settings); not via EnvironmentFile.
+# Bind loopback only; external access via Caddy (HTTPS/443).
+ExecStart=/home/jarvis/noir/backend/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --app-dir /home/jarvis/noir/backend
+Restart=always
+RestartSec=3
+# Watchdog: systemd restarts if core stops responding (paired with autonomy/watchdog.py).
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=noir-core
+
+[Install]
+WantedBy=multi-user.target

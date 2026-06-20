@@ -1,0 +1,14 @@
+id: chat_basic_01
+suite: chat
+input: "POST /api/chat returns {reply, session_id} with a meaningful reply"
+request:
+  method: POST
+  path: /api/chat
+  json: {message: "Ответь ровно одним словом: привет"}
+  timeout: 40
+expect:
+  status: 200
+  json_has_keys: [reply, session_id]
+  reply_contains_any: ["привет", "Привет"]
+  max_latency_ms: 30000
+  violations: 0

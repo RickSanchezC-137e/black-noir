@@ -1,0 +1,37 @@
+# Noir autonomy policy (build plan §3). Classes/decisions per CANON §6.
+version: 1
+autonomy_level: high            # >= old Jarvis (which was fully autonomous on YELLOW/non-financial RED)
+
+# Classes go to ALLOW without human confirm:
+allow_without_confirm:
+  - read
+  - local_write
+
+# Deterministic deny-list (absolute stop-crane; constitution immutable):
+deny_always:
+  - constitution_modify
+  - secret_exfiltration
+
+budgets:
+  llm_tokens_per_hour: 200000
+  external_calls_per_hour: 500
+  money_auto_limit_usd: 50      # <=$50 autonomous (carried from old Jarvis)
+  money_daily_cap_usd: 200      # >$200/day hard DENY (carried from old Jarvis)
+
+heartbeat_seconds: 30
+watchdog:
+  health_url: http://127.0.0.1:8000/api/core
+  max_restarts_per_hour: 10
+  backoff: exponential
+
+escalate_to_human:              # -> CONFIRM (Telegram)
+  - budget_exceeded
+  - repeated_failures
+  - external_send
+  - money
+  - self_modify
+
+# Protected paths agents/modules may never write/delete (Rule 8):
+protected_paths:
+  - /home/jarvis/secrets-backup
+  - /home/jarvis/noir/secrets

@@ -1,0 +1,20 @@
+# Local-layer decision (Rule 7 / build plan §4). Generated from hardware detect 2026-06-20.
+# Hardware: no GPU, 4 vCPU (Ryzen 9 7950X3D), 7.8 GiB RAM.
+profile: weak-no-gpu          # cloud-only local layer
+orchestrator:
+  provider: claude-api
+  model: claude-opus-4-8       # CANON §1/§5 — brain is always Claude in v1
+reflex:
+  provider: claude-api         # no local LLM until GPU available (RAM<16, no GPU)
+  note: "Swap to ollama local 7B when GPU added (provider abstraction in config)."
+embeddings:
+  provider: local
+  model: all-MiniLM-L6-v2      # CANON §2 — always local, dim=384
+  dim: 384
+stt:
+  engine: faster-whisper
+  model: base                  # CPU
+  device: cpu
+tts:
+  engine: piper
+  voice: ru_RU-dmitri-medium.onnx

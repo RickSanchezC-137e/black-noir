@@ -1,0 +1,29 @@
+# --- Secrets: NEVER commit (08_conventions §4) ---
+secrets/
+**/.env
+.env
+*.key
+*.pem
+secrets/voices/*.onnx
+
+# --- Data stores (local, not in git) ---
+*.sqlite
+*.sqlite3
+*.db
+chroma/
+data/
+**/chroma/
+eval/results/*.jsonl
+
+# --- Build artifacts ---
+desktop/src-tauri/target/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# --- Buildlog: keep docs, ignore raw dumps ---
+_buildlog/*.txt
