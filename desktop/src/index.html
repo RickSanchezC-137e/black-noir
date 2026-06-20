@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Noir HUD</title>
+<style>
+/* Original retro-terminal aesthetic (CANON §8). NO protected assets. Theme via CSS vars. */
+:root[data-theme="green"]{ --bg:#04140a; --fg:#7dffb0; --dim:rgba(125,255,176,.55);
+  --accent:#39ff8c; --accent2:#9dffc6; --warn:#ffd24d; --err:#ff6b5a;
+  --line:rgba(57,255,140,.22); --glow:0 0 4px rgba(57,255,140,.7); }
+:root[data-theme="gold"]{ --bg:#0a0c04; --fg:#ffe9c0; --dim:rgba(255,225,170,.55);
+  --accent:#ffcc00; --accent2:#ffa500; --warn:#ffc24d; --err:#e0795a;
+  --line:rgba(255,165,0,.22); --glow:0 0 4px rgba(255,165,0,.7); }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 "Cascadia Mono",Consolas,monospace;
+  letter-spacing:.3px;text-shadow:var(--glow);height:100vh;overflow:hidden}
+#crt{position:fixed;inset:0;pointer-events:none;z-index:9;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+#vig{position:fixed;inset:0;pointer-events:none;z-index:8;
+  background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.55))}
+.tb{height:34px;display:flex;align-items:center;gap:14px;padding:0 12px;border-bottom:1px solid var(--line)}
+.tb b{color:var(--accent)} .tb .sp{flex:1}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;background:var(--dim)}
+.dot.ok{background:var(--accent);box-shadow:var(--glow)} .dot.err{background:var(--err)}
+.dot.busy{background:var(--warn)}
+nav{display:flex;gap:4px} nav button,.toggle,button.act{background:transparent;color:var(--dim);
+  border:1px solid var(--line);font:inherit;padding:3px 9px;cursor:pointer;text-shadow:inherit}
+nav button.on,nav button:hover{color:var(--accent);border-color:var(--accent)}
+.toggle{color:var(--accent)}
+main{height:calc(100vh - 34px);overflow:auto;padding:14px}
+.screen{display:none} .screen.on{display:block}
+.box{border:1px solid var(--line);padding:10px 12px;margin:0 0 12px;position:relative}
+.box::before,.box::after{content:"";position:absolute;width:8px;height:8px;border:1px solid var(--accent)}
+.box::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+.box::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+h2{margin:.2em 0 .6em;color:var(--accent);font-size:13px;letter-spacing:2px}
+.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.col h3{margin:.2em 0;color:var(--accent2);font-size:11px;border-bottom:1px solid var(--line);padding-bottom:3px}
+.mod{border:1px solid var(--line);padding:5px 7px;margin:5px 0;font-size:12px}
+.mod small{color:var(--dim)}
+.kv{display:flex;justify-content:space-between;border-bottom:1px dotted var(--line);padding:2px 0}
+.kv b{color:var(--accent2)}
+.empty{color:var(--dim);font-style:italic;padding:8px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.card{flex:1;min-width:150px}
+#chatlog{height:46vh;overflow:auto;border:1px solid var(--line);padding:8px;margin-bottom:8px}
+.msg{margin:4px 0} .msg.me{color:var(--accent2)} .msg.ai{color:var(--fg)} .msg.sys{color:var(--dim)}
+#chatin{display:flex;gap:6px} #chatin input{flex:1;background:#0000;border:1px solid var(--line);
+  color:var(--fg);font:inherit;padding:6px;text-shadow:inherit}
+.chip{display:inline-block;border:1px solid var(--line);padding:1px 6px;margin:2px;font-size:11px;color:var(--dim)}
+.chip.confirmed{color:var(--accent)} .chip.tested{color:var(--accent)} .chip.open{color:var(--warn)}
+</style>
+</head>
+<body>
+<div id="crt"></div><div id="vig"></div>
+<div class="tb">
+  <b id="brand">NOIR</b>
+  <span><i class="dot" id="conn"></i><span id="connlbl" class="dim">connecting…</span></span>
+  <nav id="nav"></nav>
+  <span class="sp"></span>
+  <span id="clock" class="dim"></span>
+  <button class="toggle" id="theme">◐ GREEN/GOLD</button>
+</div>
+<main>
+  <section class="screen" id="s-map"><h2>КАРТА · ОБЛАКО ЯДРА</h2>
+    <div class="box"><div id="coreinfo" class="empty">нет связи с ядром</div></div>
+    <div class="grid" id="clusters"></div>
+  </section>
+  <section class="screen" id="s-tasks"><h2>ЗАДАЧИ</h2><div class="box" id="tasks"><div class="empty">—</div></div></section>
+  <section class="screen" id="s-chat"><h2>ЧАТ · МОДУЛЬ ВЗАИМОДЕЙСТВИЯ</h2>
+    <div id="chatlog" class="box"></div>
+    <div id="chatin"><input id="msg" placeholder="сообщение ядру…" autocomplete="off"/><button class="act" id="send">→</button></div>
+  </section>
+  <section class="screen" id="s-systems"><h2>СИСТЕМЫ · ЖЕЛЕЗО (live)</h2>
+    <div class="row"><div class="box card" id="metrics"><div class="empty">—</div></div>
+      <div class="box card" id="hw"><div class="empty">—</div></div></div>
+    <div class="box"><h3>GOVERNOR · аудит</h3><div id="gov"><div class="empty">—</div></div></div>
+  </section>
+  <section class="screen" id="s-ideas"><h2>ИДЕИ <button class="act" id="genidea">+ СГЕНЕРИРОВАТЬ</button></h2>
+    <div class="box" id="ideas"><div class="empty">—</div></div></section>
+  <section class="screen" id="s-profile"><h2>ПРОФИЛЬ ВЛАДЕЛЬЦА (C2 · live)</h2>
+    <div class="box"><h3>Сводка по доменам</h3><div id="pfacts"><div class="empty">нет данных профиля</div></div></div>
+    <div class="box"><h3>Активные гипотезы</h3><div id="phyp"><div class="empty">—</div></div></div>
+  </section>
+</main>
+<script>
+// API base: VITE_API_BASE (build) or window.NOIR_API_BASE (runtime/test) or query ?api=
+const params=new URLSearchParams(location.search);
+const API=(params.get("api")||window.NOIR_API_BASE||(window.__VITE_API_BASE__)||"http://127.0.0.1:8000").replace(/\/$/,"");
+const WS=API.replace(/^http/,"ws");
+const $=s=>document.querySelector(s); const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const CLUSTERS={C1:"C1 ВЗАИМОДЕЙСТВИЕ",C2:"C2 ПАМЯТЬ",C3:"C3 ВОСПРИЯТИЕ",C4:"САМОУЛУЧШЕНИЕ",C5:"C5 БЕЗОПАСНОСТЬ",C6:"C6 ИНСТРУМЕНТЫ"};
+const SCREENS=["map","tasks","chat","systems","ideas","profile"];
+const LBL={map:"КАРТА",tasks:"ЗАДАЧИ",chat:"ЧАТ",systems:"СИСТЕМЫ",ideas:"ИДЕИ",profile:"ПРОФИЛЬ"};
+let route="map";
+const nav=$("#nav"); SCREENS.forEach(s=>{const b=el("button",s==route?"on":"",LBL[s]);b.onclick=()=>go(s);b.dataset.s=s;nav.appendChild(b);});
+function go(s){route=s;document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.s==s));
+  document.querySelectorAll(".screen").forEach(x=>x.classList.remove("on"));$("#s-"+s).classList.add("on");}
+go("map");
+// theme toggle green<->gold
+let theme=localStorage.getItem("noir.theme")||"green"; document.documentElement.dataset.theme=theme;
+$("#theme").onclick=()=>{theme=theme=="green"?"gold":"green";document.documentElement.dataset.theme=theme;localStorage.setItem("noir.theme",theme);};
+setInterval(()=>{$("#clock").textContent=new Date().toISOString().slice(11,19);},1000);
+
+async function api(p,opt){const r=await fetch(API+p,opt);if(!r.ok)throw new Error(r.status);return r.json();}
+function setConn(s){const d=$("#conn"),l=$("#connlbl");d.className="dot "+(s=="online"?"ok":s=="busy"?"busy":"err");l.textContent=s;}
+
+async function loadCore(){try{const c=await api("/api/core");setConn("online");
+  $("#brand").textContent=(c.name||"NOIR").toUpperCase();
+  const ai=(c.ai||[]).map(a=>`<div class="kv"><span>${a.name} <small>(${a.role})</small></span><b>${a.status}</b> <small>${a.model}</small></div>`).join("");
+  $("#coreinfo").innerHTML=`<div class="kv"><span>СОСТАВ ИИ ядра (${(c.ai||[]).length})</span><b>${c.model}</b></div>${ai}`;
+}catch(e){setConn("offline");}}
+
+async function loadModules(){try{const d=await api("/api/modules");const mods=d.modules||[];
+  const wrap=$("#clusters");wrap.innerHTML="";
+  Object.keys(CLUSTERS).forEach(cid=>{const col=el("div","col");col.appendChild(el("h3",null,CLUSTERS[cid]));
+    const here=mods.filter(m=>m.cluster==cid);
+    if(!here.length)col.appendChild(el("div","empty","—"));
+    here.forEach(m=>{const dotc=m.status=="idle"?"ok":m.status=="busy"?"busy":m.status=="error"?"err":"";
+      col.appendChild(el("div","mod",`<i class="dot ${dotc}"></i>${m.display_name||m.name}<br><small>v${m.version} · ${m.status} · ${(m.tools||[]).length} tools</small>`));});
+    wrap.appendChild(col);});
+}catch(e){}}
+
+async function loadSystems(){try{const m=await api("/api/systems/metrics");
+  $("#metrics").innerHTML=`<h3>МЕТРИКИ ХОСТА</h3>
+    <div class="kv"><span>CPU</span><b>${m.cpu}%</b></div>
+    <div class="kv"><span>RAM</span><b>${m.ram}% (${m.ram_used_mb}/${m.ram_total_mb} МБ)</b></div>
+    <div class="kv"><span>Uptime</span><b>${m.uptime}</b></div>
+    <div class="kv"><span>Cores / GPU</span><b>${m.cores} / ${m.gpu?"да":"нет"}</b></div>`;
+  const s=await api("/api/systems");const h=s.hardware;
+  $("#hw").innerHTML=`<h3>ЛОКАЛЬНЫЙ СЛОЙ</h3>
+    <div class="kv"><span>Профиль</span><b>${h.local_layer}</b></div>
+    <div class="kv"><span>Reflex</span><b>${h.reflex}</b></div>
+    <div class="kv"><span>STT/TTS</span><b>whisper-${h.whisper_model} / piper</b></div>
+    <div class="kv"><span>Embeddings</span><b>${s.embedding.model} (${s.embedding.dim})</b></div>`;
+}catch(e){}
+try{const g=await api("/api/governor/audit?limit=8");
+  $("#gov").innerHTML=(g.audit||[]).map(a=>`<div class="kv"><span>${a.module}.${a.tool} <small>${a.action_class}</small></span><b>${a.decision}</b> <small>ok=${a.ok}</small></div>`).join("")||'<div class="empty">—</div>';
+}catch(e){}}
+
+async function loadTasks(){try{const d=await api("/api/tasks");const t=d.tasks||[];
+  $("#tasks").innerHTML=t.length?t.map(x=>`<div class="kv"><span>${x.title||x.id}</span><b>${x.status}</b></div>`).join(""):'<div class="empty">нет задач</div>';
+}catch(e){}}
+
+async function loadIdeas(){try{const d=await api("/api/ideas?limit=12");const it=d.ideas||[];
+  $("#ideas").innerHTML=it.length?it.map(i=>`<div class="kv"><span>${i.text}</span><span class="chip ${i.status}">${i.status}</span></div>`).join(""):'<div class="empty">нет идей</div>';
+}catch(e){}}
+$("#genidea").onclick=async()=>{$("#genidea").textContent="…";try{await api("/api/ideas/generate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({n:2})});await loadIdeas();}catch(e){}$("#genidea").textContent="+ СГЕНЕРИРОВАТЬ";};
+
+async function loadProfile(){try{const d=await api("/api/memory?module=owner_profile");
+  const by={};(d.items||[]).forEach(f=>{(by[f.type]=by[f.type]||[]).push(f);});
+  const html=Object.keys(by).map(dom=>`<div class="mod"><b>${dom}</b>${by[dom].map(f=>`<div class="kv"><span>${f.value}</span><small>${(f.confidence||"")} · ${f.source||""}</small></div>`).join("")}</div>`).join("");
+  $("#pfacts").innerHTML=html||'<div class="empty">нет данных профиля</div>';
+  $("#phyp").innerHTML=(d.hypotheses||[]).map(h=>`<div class="kv"><span>${h.statement}</span><span class="chip ${h.verdict||h.status}">${h.verdict||h.status}</span></div>`).join("")||'<div class="empty">—</div>';
+}catch(e){}}
+
+// chat (POST /api/chat; live)
+let sid=null;
+async function sendChat(){const i=$("#msg");const text=i.value.trim();if(!text)return;i.value="";
+  $("#chatlog").appendChild(el("div","msg me","» "+text));
+  try{const r=await api("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message:text,session_id:sid})});
+    sid=r.session_id;$("#chatlog").appendChild(el("div","msg ai",r.reply));
+  }catch(e){$("#chatlog").appendChild(el("div","msg sys","[нет связи с ядром]"));}
+  $("#chatlog").scrollTop=1e9;}
+$("#send").onclick=sendChat;$("#msg").addEventListener("keydown",e=>{if(e.key=="Enter")sendChat();});
+
+async function refresh(){await loadCore();await Promise.all([loadModules(),loadSystems(),loadTasks(),loadIdeas(),loadProfile()]);}
+refresh();setInterval(refresh,5000);
+window.__noirReady=true;
+</script>
+</body>
+</html>

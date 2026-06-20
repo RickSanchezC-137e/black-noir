@@ -29,3 +29,5 @@ secrets/voices/*.onnx
 *.sqlite
 *.sqlite3
 .venv/
+desktop/dist/
+desktop/node_modules/

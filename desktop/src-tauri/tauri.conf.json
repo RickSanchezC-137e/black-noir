@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Noir",
+  "version": "0.1.0",
+  "identifier": "org.noir.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      { "title": "Noir", "decorations": false, "width": 1280, "height": 800,
+        "minWidth": 1024, "minHeight": 640 }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "windows": { "webviewInstallMode": { "type": "downloadBootstrapper" } }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": ["https://github.com/RickSanchezC-137e/noir/releases/latest/download/latest.json"],
+      "dialog": true,
+      "pubkey": "<<TAKE_FROM_OLD_PROJECT>>"
+    }
+  }
+}

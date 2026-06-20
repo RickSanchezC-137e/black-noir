@@ -61,7 +61,13 @@ class ModuleManager:
                 self._handlers[man.module_id] = factory.load_handler(factory.INSTALLED / mod_id)
 
     def list(self) -> list[dict]:
-        return registry.list_modules(str(settings.sqlite_path))
+        rows = registry.list_modules(str(settings.sqlite_path))
+        for r in rows:
+            man = self._manifests.get(r["name"])
+            r["cluster"] = man.cluster if man else None
+            r["display_name"] = man.display_name if man else r["name"]
+            r["tools"] = [t.name for t in man.tools] if man else []
+        return rows
 
     def install_report(self) -> list[dict]:
         return self._install_report
