@@ -1,0 +1,18 @@
+manifest_version: 1
+module_id: mcp_shell
+cluster: C6
+display_name: "Shell (allowlist)"
+description: "Run allowlisted read-only shell commands; everything else is denied."
+version: 1.0.0
+runtime: in-process
+namespace: m_mcp_shell__
+tools:
+  # action_class reflects EFFECT, not mechanism: the allowlist confines shell.run to
+  # read-only introspection (ls/cat/df/ps/systemctl-status/echo...), so its effect is
+  # `read`. Any mutation is refused by the handler allowlist itself (defense in depth).
+  # A future mutating shell tool would be a separate tool with action_class: system.
+  - { name: shell.run, action_class: read, description: "Run an allowlisted read-only command" }
+capabilities:
+  filesystem: read
+  network: none
+  action_classes: [read]

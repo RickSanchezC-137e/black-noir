@@ -1,0 +1,16 @@
+manifest_version: 1
+module_id: mcp_fs
+cluster: C6
+display_name: "Filesystem (sandbox)"
+description: "Read/write/list files within a sandbox root only."
+version: 1.0.0
+runtime: in-process            # trusted base tool-module (§1.6)
+namespace: m_mcp_fs__
+tools:
+  - { name: fs.list,  action_class: read,        description: "List a directory in sandbox" }
+  - { name: fs.read,  action_class: read,        description: "Read a file in sandbox" }
+  - { name: fs.write, action_class: local_write, description: "Write a file in sandbox" }
+capabilities:
+  filesystem: read-write        # sandbox root only
+  network: none
+  action_classes: [read, local_write]

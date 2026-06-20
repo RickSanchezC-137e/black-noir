@@ -1,0 +1,15 @@
+manifest_version: 1
+module_id: mcp_search
+cluster: C6
+display_name: "Web Search (Tavily)"
+description: "Live web search via Tavily API."
+version: 1.0.0
+runtime: in-process
+namespace: m_mcp_search__
+tools:
+  - { name: search.web, action_class: external_send, description: "Search the web via Tavily" }
+capabilities:
+  filesystem: none
+  network: egress-allow
+  secrets: [tavily_api_key]
+  action_classes: [external_send]

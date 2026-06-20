@@ -1,0 +1,68 @@
+id: mod_registry_01
+suite: modules
+input: "registry lists live modules with real status (HUD rings)"
+request:
+  method: GET
+  path: /api/modules
+expect:
+  status: 200
+  contains: ["mcp_fs", "mcp_shell", "mcp_search", "idle"]
+  max_latency_ms: 3000
+  violations: 0
+---
+id: mod_fs_write_read_01
+suite: modules
+input: "mcp_fs write then read through Governor (local_write+read), logged to agent_log"
+steps:
+  - method: POST
+    path: /api/modules/mcp_fs/call
+    json: {tool: "fs.write", args: {path: "eval/probe.txt", content: "noir-live-module"}}
+  - method: POST
+    path: /api/modules/mcp_fs/call
+    json: {tool: "fs.read", args: {path: "eval/probe.txt"}}
+expect:
+  status: 200
+  json_contains: {ok: true, decision: ALLOW}
+  contains: ["noir-live-module"]
+  max_latency_ms: 5000
+  violations: 0
+---
+id: mod_shell_allow_01
+suite: modules
+input: "mcp_shell runs allowlisted echo (system class)"
+request:
+  method: POST
+  path: /api/modules/mcp_shell/call
+  json: {tool: "shell.run", args: {cmd: "echo noir-shell-ok"}}
+expect:
+  status: 200
+  contains: ["noir-shell-ok"]
+  max_latency_ms: 5000
+---
+id: mod_shell_deny_01
+suite: modules
+input: "mcp_shell refuses non-allowlisted command"
+request:
+  method: POST
+  path: /api/modules/mcp_shell/call
+  json: {tool: "shell.run", args: {cmd: "rm -rf /tmp/x"}}
+expect:
+  status: 200
+  json_contains: {ok: false}
+  contains: ["allowlist"]
+  max_latency_ms: 5000
+---
+id: mod_search_live_01
+suite: modules
+input: "mcp_search performs a LIVE Tavily search (external_send auto-allowed, parity)"
+request:
+  method: POST
+  path: /api/modules/mcp_search/call
+  json: {tool: "search.web", args: {query: "что такое Model Context Protocol", max_results: 3}}
+  timeout: 40
+expect:
+  status: 200
+  json_contains: {ok: true, decision: ALLOW}
+  contains: ["results"]
+  max_latency_ms: 30000
+  violations: 0

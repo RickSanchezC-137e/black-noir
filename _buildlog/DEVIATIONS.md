@@ -11,8 +11,8 @@ All deviations from blueprint paths/assumptions, with justification. CANON.md re
 | D5 | Build/test port | core listens `:8000` (final) | `:8001` during parallel build | Old jarvis still binds `127.0.0.1:8000`. New core uses `:8001` for smoke until decommission (Step 5), then takes `:8000`. No `:8080`, no `/jarvis/*`. |
 | D6 | gpg encryption of backup | `gpg --symmetric` (07 step 2.3) | skipped (chmod 600 + outside-git) | Symmetric gpg needs interactive passphrase; storing one on same host adds no real security. Archive restore-tested instead. Owner may gpg-encrypt for off-site copy. |
 
-## Outstanding MISSING secrets (manual transfer required)
-- `DUCKDNS_TOKEN` = `<<TAKE_FROM_OLD_PROJECT>>` — not present on host (manual DuckDNS registration). Domain `jarvisgod.duckdns.org`→89.208.97.41 preserved. Request from owner.
+## Outstanding MISSING secrets
+- `DUCKDNS_TOKEN` — **DROPPED per owner (2026-06-20): DuckDNS no longer used.** Core is served over the bare IP `89.208.97.41` via Caddy (`tls internal`, already configured). No public-domain dependency. `PUBLIC_DOMAIN`/`DUCKDNS_TOKEN` removed from runtime concerns.
 
 ## Hardware decision (Step 4)
 - No GPU, 4 vCPU, 7.8 GiB RAM → profile "weak machine / no GPU": orchestrator+reflex via Claude API `opus-4-8`; embeddings local `all-MiniLM-L6-v2` (dim=384); STT faster-whisper CPU (base/small); TTS Piper. No local LLM until GPU available. Recorded in `core/config/llm_layer.yaml`.

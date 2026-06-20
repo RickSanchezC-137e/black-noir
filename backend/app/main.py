@@ -25,6 +25,10 @@ async def lifespan(app: FastAPI):
     hp = detect_hardware()
     log.info("hardware: cpu=%s ram_mb=%s gpu=%s -> %s", hp.cpu_cores, hp.ram_mb,
              hp.gpu.present, hp.local_layer)
+    from app.core.modules_runtime import manager
+    await manager.startup()
+    installed = [r["module"] for r in manager.install_report() if r.get("installed")]
+    log.info("modules installed: %s", installed)
     log.info("%s core up — model=%s embeddings=%s", settings.project_name,
              settings.claude_model, settings.embedding_model)
     yield
@@ -34,7 +38,7 @@ app = FastAPI(title=f"{settings.project_name} core", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # routers (imported after app to avoid cycles)
-from app.api import chat, core, governor, memory, ws  # noqa: E402
+from app.api import chat, core, governor, memory, modules, ws  # noqa: E402
 
-for r in (core.router, chat.router, memory.router, governor.router, ws.router):
+for r in (core.router, chat.router, memory.router, governor.router, modules.router, ws.router):
     app.include_router(r)

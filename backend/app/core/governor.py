@@ -32,6 +32,11 @@ PROTECTED_PATHS = ("/home/jarvis/secrets-backup", "/home/jarvis/noir/secrets")
 # Auto-allow classes (read/local_write are safe by default; rest escalate).
 ALLOW_WITHOUT_CONFIRM = {"read", "local_write"}
 
+# Specific low-risk external_send tools auto-allowed (read-only web retrieval) —
+# preserves old Jarvis autonomy parity (web search was silent/GREEN). Reversible
+# policy allowance, audited; does NOT touch the immutable constitution.
+AUTO_ALLOW_EXTERNAL_TOOLS = {"search.web"}
+
 # Money rails (carried over and hardened from old Jarvis financial policy).
 MONEY_AUTO_LIMIT_USD = 50.0
 MONEY_DAILY_CAP_USD = 200.0
@@ -90,6 +95,8 @@ class Governor:
         # 3) class policy
         if a.action_class in ALLOW_WITHOUT_CONFIRM:
             return Decision(ALLOW, "auto-allowed class")
+        if a.action_class == "external_send" and a.tool in AUTO_ALLOW_EXTERNAL_TOOLS:
+            return Decision(ALLOW, "auto-allowed read-only web retrieval (parity)")
         # external_send / system / self_modify -> escalate
         return Decision(CONFIRM, f"class '{a.action_class}' requires owner confirm")
 
