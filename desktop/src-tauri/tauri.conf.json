@@ -12,21 +12,22 @@
   "app": {
     "withGlobalTauri": true,
     "windows": [
-      { "title": "Noir", "decorations": false, "width": 1280, "height": 800,
+      { "label": "main", "title": "Noir", "decorations": false, "width": 1280, "height": 800,
         "minWidth": 1024, "minHeight": 640 }
     ]
   },
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.ico"],
     "windows": { "webviewInstallMode": { "type": "downloadBootstrapper" } }
   },
   "plugins": {
     "updater": {
       "active": true,
-      "endpoints": ["https://github.com/RickSanchezC-137e/noir/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/RickSanchezC-137e/black-noir/releases/latest/download/latest.json"],
       "dialog": true,
-      "pubkey": "<<TAKE_FROM_OLD_PROJECT>>"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQxNDJGMzdFMDg5NkI5RDIKUldUU3VaWUlmdk5DMFJGU2ZBWGQ1YkRWWXpQekRqZkdXZTZTeVFhOXREaTRSb052TXFCcHF3TWwK"
     }
   }
 }

@@ -12,14 +12,14 @@ dependencies = [
     "httpx>=0.27",
     "pyyaml>=6.0",
     "anthropic>=0.40",
-    "chromadb>=0.5",
-    "sentence-transformers>=3.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6"]
+# Heavy ML deps loaded lazily at runtime; kept optional so CI/pytest stays light.
+memory = ["chromadb>=0.5", "sentence-transformers>=3.0"]
 voice = ["faster-whisper>=1.0", "piper-tts>=1.2"]
-search = ["tavily-python>=0.5"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6"]
+all = ["chromadb>=0.5", "sentence-transformers>=3.0", "faster-whisper>=1.0", "piper-tts>=1.2"]
 
 [tool.ruff]
 line-length = 110

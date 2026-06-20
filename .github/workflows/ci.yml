@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [master, dev, "feat/**", "fix/**"]
+  pull_request:
+    branches: [master, dev]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Install (light deps + dev)
+        run: pip install -e "backend[dev]"
+      - name: Ruff
+        run: ruff check backend/app || true   # advisory until lint debt cleared
+      - name: Pytest
+        env:
+          ANTHROPIC_API_KEY: test-key-not-real
+        run: cd backend && PYTHONPATH=. pytest -q
+
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Install + build frontend
+        run: |
+          cd desktop
+          npm install
+          npm run build
+      - name: Verify dist produced
+        run: test -f desktop/dist/index.html
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Scan tracked content for key patterns
+        run: |
+          if git grep -nE 'sk-ant-[A-Za-z0-9_-]{20}|tvly-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{30}|github_pat_[A-Za-z0-9_]{40}|[0-9]{9,}:AA[A-Za-z0-9_-]{30}' -- . ; then
+            echo "::error::secret-like pattern found in tracked files"; exit 1
+          fi
+          echo "no secret patterns in tracked files"

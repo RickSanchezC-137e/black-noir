@@ -14,7 +14,7 @@ from pathlib import Path
 from app.config import settings
 from app.core.governor import ALLOW, Action, audit, governor
 
-_REPO = Path("/home/jarvis/noir")
+_REPO = Path(__file__).resolve().parents[3]   # noir/ (portable; not hardcoded to prod path)
 _MODULES = _REPO / "modules"
 for p in (str(_MODULES),):
     if p not in sys.path:
