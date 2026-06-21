@@ -36,6 +36,10 @@ SCHEMAS = [
      "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
     {"name": "create_idea", "description": "Завести идею на разбор (контур самоулучшения).",
      "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+    {"name": "request_module_build", "description": "Заказать Фабрике сборку НОВОГО модуля (в очередь, собирается off-core). Используй, когда владелец описывает нужный модуль.",
+     "input_schema": {"type": "object", "properties": {
+         "name": {"type": "string"}, "cluster": {"type": "string"}, "purpose": {"type": "string"},
+         "tools": {"type": "array", "items": {"type": "string"}}}, "required": ["name"]}},
     {"name": "adopt_repo", "description": "Разобрать GitHub-репозиторий (лицензия+безопасность+eval) и внедрить, если стоящий и совместимый.",
      "input_schema": {"type": "object", "properties": {
          "repo": {"type": "string", "description": "owner/name или URL"},
@@ -114,6 +118,14 @@ async def run(name: str, inp: dict) -> str:
             return json.dumps({"repo": repo, "verdict": rep.get("verdict"), "reason": rep.get("reason"),
                                "license": rep.get("license"), "security": (rep.get("security") or {}).get("safe"),
                                "module_id": rep.get("module_id")}, ensure_ascii=False)
+
+        if name == "request_module_build":
+            from app.core import module_factory
+            tl = inp.get("tools") or []
+            tools = [{"name": t, "action_class": "read", "description": t} if isinstance(t, str) else t for t in tl]
+            r = module_factory.request_build(kind="spec", name=inp.get("name", ""), cluster=inp.get("cluster", "C6"),
+                                             purpose=inp.get("purpose", ""), tools=tools)
+            return f"Модуль '{inp.get('name')}' поставлен в очередь фабрики ({r['id']}). Соберётся в песочнице, готовое — на подтверждение."
 
         return f"[неизвестный инструмент: {name}]"
     except Exception as e:  # noqa: BLE001 — surface error to the model, don't crash the turn

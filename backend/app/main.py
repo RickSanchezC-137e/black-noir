@@ -50,8 +50,16 @@ for r in (core.router, chat.router, memory.router, governor.router, modules.rout
 try:
     from fastapi.staticfiles import StaticFiles
     import os as _os
+
+    class _NoCacheStatic(StaticFiles):
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            if path.endswith(".html") or path in (".", "index.html"):
+                resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            return resp
+
     _dist = "/home/jarvis/noir/desktop/dist"
     if _os.path.isdir(_dist):
-        app.mount("/", StaticFiles(directory=_dist, html=True), name="hud")
+        app.mount("/", _NoCacheStatic(directory=_dist, html=True), name="hud")
 except Exception:  # noqa: BLE001
     pass

@@ -49,6 +49,13 @@ async def core_status():
     }
 
 
+@router.get("/core/council")
+async def core_council():
+    """Council members with REAL liveness (cached ping) — not just key presence."""
+    from app.core import providers
+    return {"council": await providers.live_status()}
+
+
 @router.get("/systems")
 async def systems():
     """Real hardware profile (Rule 7) — never demo data."""

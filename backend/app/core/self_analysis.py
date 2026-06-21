@@ -71,9 +71,8 @@ async def _gather(db: aiosqlite.Connection) -> list[dict]:
 
 
 def _intent(f: dict) -> str:
-    day = _now()[:10]
-    return (f"[{day}] harden {f['module']} — {f['count']}x {f['kind']} on {f['signal']}"
-            f"{(': ' + f['sample']) if f['sample'] else ''}")
+    # STABLE intent → stable scout signature → no near-duplicate hypotheses across runs
+    return f"harden {f['module']}: recurring {f['kind']} on {f['signal']}"
 
 
 async def analyze(top: int = 3, enqueue: bool = True) -> dict:

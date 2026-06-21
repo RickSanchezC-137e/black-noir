@@ -221,8 +221,14 @@ async def chat(body: ChatIn):
     await _save(sid, "user", body.message)
     await memory.remember(body.message, source=f"chat:{target or agent}", role="user")
 
+    _FACTORY_SYS = ("Сейчас ты — агент Фабрики модулей (C4). Когда владелец описывает нужный модуль, "
+                    "ВЫЗОВИ инструмент request_module_build (name, cluster, purpose, tools). Подтверди, что "
+                    "поставил сборку в очередь. На общие вопросы отвечай кратко.")
     out = ChatOut(reply="", session_id=sid, agent=("module" if tgt_sys else agent))
-    if tgt_sys:
+    if target == "module:factory":
+        r = await orchestrator.run(body.message, hist, extra_system=_FACTORY_SYS)
+        out.reply, out.actions = r["reply"], (r["actions"] or None)
+    elif tgt_sys:
         out.reply, _, _ = await claude.chat_as(tgt_sys + (("\n\n" + mem) if mem else ""), body.message, hist)
     elif agent == "mediator":
         r = await mediator.relay(body.message, hist)

@@ -51,17 +51,17 @@ def main() -> int:
         checks["map: pulsing/live nodes"] = pg.locator("#s2svg circle.nd.live").count() > 0
         pg.screenshot(path=os.path.join(OUT, "1-map.png"))
 
-        # core inspector via the core node
-        pg.click("#s2svg [data-core]"); pg.wait_for_timeout(500)
-        checks["map: core inspector = 4 AI"] = "Оркестратор" in pg.inner_text("#insp") and "Builder" in pg.inner_text("#insp")
+        pg.click("#s2svg [data-core]"); pg.wait_for_timeout(700)
+        pg.eval_on_selector_all("#mv-tabs .mvtab", "els=>{for(const e of els) if(e.textContent.includes('4 ИИ')) e.click();}"); pg.wait_for_timeout(500)
+        checks["map: core dashboard = 4 AI"] = "Оркестратор" in pg.inner_text("#mv-body") and "Builder" in pg.inner_text("#mv-body")
         pg.screenshot(path=os.path.join(OUT, "1b-core-ai.png"))
-        pg.click("#insp-x")
+        pg.click("#mv-x")
 
         def tab(name):
             pg.click(f".tab[data-go={name}]"); pg.wait_for_timeout(700)
 
         tab("tasks")
-        checks["tasks: kanban columns"] = "В ОЧЕРЕДИ" in pg.inner_text("#tasks") and "ГОТОВО" in pg.inner_text("#tasks")
+        checks["tasks: kanban + done"] = "В ОЧЕРЕДИ" in pg.inner_text("#tasks") and "ВЫПОЛНЕНО" in pg.inner_text("#tasks")
         pg.screenshot(path=os.path.join(OUT, "2-tasks.png"))
 
         tab("chat")

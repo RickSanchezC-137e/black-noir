@@ -81,15 +81,30 @@ async def accept(idea_id: str):
         row = await cur.fetchone()
         if not row:
             raise HTTPException(404, "idea not found")
-        tid = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
+        idea_text = row["text"]
+    # expand the idea into a concrete task (title + plan) — "расписать", not just store
+    title, plan = idea_text[:60], idea_text
+    try:
+        import json as _j
+        from app.core import claude
+        raw, _, _ = await claude.chat_as(
+            "Разверни идею в конкретную задачу для ИИ-системы. Верни СТРОГО JSON: "
+            '{"title":"краткий заголовок до 60 символов","plan":"что сделать по шагам, по-русски"}.',
+            idea_text)
+        d = _j.loads(raw[raw.index("{"):raw.rindex("}") + 1])
+        title = (d.get("title") or title)[:60]; plan = d.get("plan") or plan
+    except Exception:  # noqa: BLE001
+        pass
+    tid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(settings.sqlite_path) as db:
         await db.execute(
-            "INSERT INTO tasks(id,kind,status,payload,created_at,updated_at)"
-            " VALUES(?,?,?,?,?,?)",
-            (tid, "idea", "pending", row["text"], now, now))
+            "INSERT INTO tasks(id,kind,status,payload,progress,created_at,updated_at)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (tid, title, "pending", plan, 0, now, now))
         await db.execute("UPDATE ideas SET status='accepted' WHERE id=?", (idea_id,))
         await db.commit()
-    return {"task_id": tid, "status": "accepted"}
+    return {"task_id": tid, "title": title, "status": "accepted"}
 
 
 @router.post("/{idea_id}/reject")

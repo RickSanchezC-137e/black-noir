@@ -22,7 +22,7 @@ async def list_tasks(limit: int = 50):
     async with aiosqlite.connect(settings.sqlite_path) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT id,kind,status,created_at,updated_at FROM tasks"
+            "SELECT id,kind,status,progress,created_at,updated_at FROM tasks"
             " ORDER BY created_at DESC LIMIT ?", (limit,))
         return {"tasks": [dict(r) for r in await cur.fetchall()]}
 
@@ -35,8 +35,8 @@ async def create_task(body: CreateIn):
     now = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(settings.sqlite_path) as db:
         await db.execute(
-            "INSERT INTO tasks(id,kind,status,payload,created_at,updated_at)"
-            " VALUES(?,?,?,?,?,?)", (tid, body.kind, "pending", body.payload, now, now))
+            "INSERT INTO tasks(id,kind,status,payload,progress,created_at,updated_at)"
+            " VALUES(?,?,?,?,?,?,?)", (tid, body.kind, "pending", body.payload, 0, now, now))
         await db.commit()
     return {"id": tid, "kind": body.kind, "status": "queued"}
 
@@ -47,7 +47,7 @@ async def task_detail(task_id: str):
     async with aiosqlite.connect(settings.sqlite_path) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT id,kind,status,payload,result,error,created_at,updated_at"
+            "SELECT id,kind,status,payload,result,error,progress,created_at,updated_at"
             " FROM tasks WHERE id=?", (task_id,))
         row = await cur.fetchone()
         if not row:
@@ -70,6 +70,16 @@ async def _set_status(task_id: str, status: str) -> dict:
         if cur.rowcount == 0:
             raise HTTPException(404, "task not found")
     return {"ok": True, "id": task_id, "status": status}
+
+
+@router.post("/{task_id}/delete")
+async def delete_task(task_id: str):
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        cur = await db.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+        await db.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "task not found")
+    return {"ok": True, "deleted": task_id}
 
 
 @router.post("/{task_id}/cancel")
