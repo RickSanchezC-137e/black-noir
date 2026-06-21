@@ -32,7 +32,7 @@ async function setupWindow() {
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const w = getCurrentWindow();
-    $("#w-min").onclick = () => w.minimize();
+    $("#w-min").onclick = () => w.hide();   // свернуть в трей (вернуть — клик по иконке в трее)
     $("#w-max").onclick = () => w.toggleMaximize();
     $("#w-close").onclick = () => w.close();
     window.addEventListener("keydown", async (e) => {
@@ -67,6 +67,9 @@ document.querySelectorAll(".tab").forEach((b) => b.onclick = () => {
   cur = b.dataset.go;
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === b));
   document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("hidden", p.dataset.tab !== cur));
+  // close floating overlays so they don't linger/overlap on other tabs
+  $("#insp").classList.remove("open");
+  if (cur !== "chat") $("#facewin").classList.remove("on");
   if (cur === "map" && window.__resize) window.__resize();
 });
 // hotkeys Ctrl+1..6
@@ -159,6 +162,7 @@ function openInspector(kind, id) {
 //  3D core cloud (Map) — raycaster click + camera fly-in (подлёт)
 // ====================================================================
 let phos, scene, themed = [], moduleLabels = [], rebuildNodes;
+let mode2d = false, glCanvas = null;
 let lookTarget = new THREE.Vector3(), distTarget = 430;
 function flyTo(v, dist) { lookTarget.copy(v); distTarget = dist; }
 function build3D() {
@@ -168,7 +172,7 @@ function build3D() {
   scene = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(54, W / H, .1, 6000);
   const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  r.setSize(W, H); r.setClearColor(0, 0); map.insertBefore(r.domElement, map.firstChild);
+  r.setSize(W, H); r.setClearColor(0, 0); map.insertBefore(r.domElement, map.firstChild); glCanvas = r.domElement;
   const mat = (o) => { const m = new THREE.MeshBasicMaterial(Object.assign({ color: phos.clone() }, o || {})); themed.push(m); return m; };
   const lmat = (op) => { const m = new THREE.LineBasicMaterial({ color: phos.clone(), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }); themed.push(m); return m; };
   const cv = document.createElement("canvas"); cv.width = cv.height = 128; const g = cv.getContext("2d");
@@ -228,12 +232,12 @@ function build3D() {
 
   let th = .5, ph = 1.05, dist = 430, rot = false, lx, ly, downx, downy; const vp = new THREE.Vector3(), look = new THREE.Vector3();
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-  map.addEventListener("pointerdown", (e) => { rot = true; lx = downx = e.clientX; ly = downy = e.clientY; });
+  map.addEventListener("pointerdown", (e) => { if (mode2d) return; rot = true; lx = downx = e.clientX; ly = downy = e.clientY; });
   window.addEventListener("pointermove", (e) => { if (!rot) return; th -= (e.clientX - lx) * .005; ph -= (e.clientY - ly) * .005; ph = Math.max(.2, Math.min(2.9, ph)); lx = e.clientX; ly = e.clientY; });
   window.addEventListener("pointerup", (e) => {
     rot = false;
+    if (mode2d || cur !== "map") return;            // 2D schema handles its own clicks
     if (Math.abs(e.clientX - downx) > 4 || Math.abs(e.clientY - downy) > 4) return; // was a drag
-    if (cur !== "map") return;
     const rect = r.domElement.getBoundingClientRect();
     if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
     ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1; ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -245,12 +249,12 @@ function build3D() {
     else if (u.kind === "cluster") { flyTo(u.pos, 150); }       // влететь в кластер
     else if (u.kind === "module") { openInspector("module", u.id); }
   });
-  map.addEventListener("wheel", (e) => { e.preventDefault(); distTarget *= (e.deltaY > 0 ? 1.1 : .9); distTarget = Math.max(60, Math.min(900, distTarget)); }, { passive: false });
+  map.addEventListener("wheel", (e) => { if (mode2d) return; e.preventDefault(); distTarget *= (e.deltaY > 0 ? 1.1 : .9); distTarget = Math.max(60, Math.min(900, distTarget)); }, { passive: false });
   window.__resize = () => { W = map.clientWidth || W; H = map.clientHeight || H; r.setSize(W, H); cam.aspect = W / H; cam.updateProjectionMatrix(); };
 
   (function frame() {
     requestAnimationFrame(frame);
-    if (cur !== "map") return;
+    if (cur !== "map" || mode2d) return;       // paused in 2D so nothing renders/rotates behind the schema
     if (!rot) th += .0008;
     look.lerp(lookTarget, 0.08); dist += (distTarget - dist) * 0.08;
     cam.position.set(look.x + dist * Math.sin(ph) * Math.sin(th), look.y + dist * Math.cos(ph), look.z + dist * Math.sin(ph) * Math.cos(th));
@@ -303,8 +307,8 @@ function render2D() {
   $("#s2act").textContent = total ? `${active}/${total} ACTIVE` : "нет модулей";
 }
 $("#s2search").addEventListener("input", (e) => { s2q = e.target.value.trim().toLowerCase(); render2D(); });
-$("#sb3d").onclick = () => { $("#sb3d").classList.add("on"); $("#sb2d").classList.remove("on"); $("#schema2d").classList.add("hidden"); $("#labels").classList.remove("hidden"); $("#maphint").style.display = ""; if (window.__resize) window.__resize(); };
-$("#sb2d").onclick = () => { $("#sb2d").classList.add("on"); $("#sb3d").classList.remove("on"); $("#schema2d").classList.remove("hidden"); $("#labels").classList.add("hidden"); $("#maphint").style.display = "none"; render2D(); };
+$("#sb3d").onclick = () => { mode2d = false; if (glCanvas) glCanvas.style.display = ""; $("#sb3d").classList.add("on"); $("#sb2d").classList.remove("on"); $("#schema2d").classList.add("hidden"); $("#labels").classList.remove("hidden"); $("#maphint").style.display = ""; if (window.__resize) window.__resize(); };
+$("#sb2d").onclick = () => { mode2d = true; if (glCanvas) glCanvas.style.display = "none"; $("#sb2d").classList.add("on"); $("#sb3d").classList.remove("on"); $("#schema2d").classList.remove("hidden"); $("#labels").classList.add("hidden"); $("#maphint").style.display = "none"; render2D(); };
 
 // ====================================================================
 //  TASKS — kanban + inspector ИНФО/ЛОГ/ВЕТВЬ/ЧАТ (live)
