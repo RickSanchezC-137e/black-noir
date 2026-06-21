@@ -214,10 +214,14 @@ async def rollback(token: str) -> dict:
     return {"ok": True, "rolled_back": token}
 
 
+# Deterministic, no-Claude-cost suites the autonomous loop closes gaps in.
+GAP_SUITES = ["improve", "core", "governor", "modules", "profile", "selfimprove"]
+
+
 def _failing_cases(base: str = "http://127.0.0.1:8000") -> list[dict]:
-    """Run the full eval against `base` and return the failing cases (spec gaps)."""
+    """Run the cheap deterministic suites against `base`; return failing cases (spec gaps)."""
     import yaml
-    cmd = [sys.executable, str(REPO / "eval" / "runner.py"), "--suite", "all", "--base", base]
+    cmd = [sys.executable, str(REPO / "eval" / "runner.py"), "--suite", *GAP_SUITES, "--base", base]
     out = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO / "eval"), timeout=200).stdout
     fail_ids = []
     for line in out.splitlines():

@@ -1,0 +1,15 @@
+# /etc/systemd/system/noir-improve.service
+# Autonomous self-improvement: close eval-spec gaps via Builder, self-deploy through the gate.
+# Standalone process (restarts the core itself). Budget-gated; Telegram-notified; auto-rollback.
+[Unit]
+Description=Black Noir autonomous self-improvement tick
+After=noir-core.service
+Requires=noir-core.service
+[Service]
+Type=oneshot
+User=jarvis
+Group=jarvis
+WorkingDirectory=/home/jarvis/noir/backend
+Environment=PYTHONPATH=/home/jarvis/noir/backend
+TimeoutStartSec=900
+ExecStart=/home/jarvis/noir/backend/.venv/bin/python -m app.core.realimprove auto
