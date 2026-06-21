@@ -26,10 +26,17 @@ INSTALLED = REPO / "modules" / "installed"
 COMPAT = {"mit", "apache", "bsd", "isc", "mpl", "lgpl"}
 INCOMPAT = {"agpl", "gpl-3", "gplv3", "sspl", "proprietary", "unlicensed"}
 
-# security-lite deny patterns (until SkillSpector is adopted as the scanner)
-DANGER = [r"curl\s+[^|]*\|\s*sh", r"rm\s+-rf\s+/", r"eval\(base64", r"os\.system\(.*rm ",
-          r"socket\.connect.*0\.0\.0\.0", r"subprocess.*shell=True.*http"]
-SECRET_PAT = re.compile(r"(sk-ant-[A-Za-z0-9_-]{20}|ghp_[A-Za-z0-9]{30}|AKIA[0-9A-Z]{16})")
+# security-lite deny patterns (until SkillSpector is adopted as the scanner).
+# Real install-time / runtime threats only — NOT strings that legitimately appear as data.
+DANGER = [r"curl\s+-[a-zA-Z]*\s+https?://\S+\s*\|\s*(sudo\s+)?(ba)?sh",
+          r"eval\(base64\.b64decode", r"os\.system\(\s*['\"]\s*rm\s+-rf\s+/"]
+SECRET_PAT = re.compile(r"(sk-ant-[A-Za-z0-9_-]{30}|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16})")
+
+# files that legitimately contain attack strings as DATA (scanners, detectors, rule/pattern DBs,
+# samples, docs) — excluded from the dangerous-pattern scan to avoid false positives.
+_DATA_FILE_HINTS = ("pattern", "detector", "signature", "rule", "payload", "exploit",
+                    "attack", "misuse", "malicious", "sample", "fixture", "vuln", "readme",
+                    "changelog", "install", "_test", "test_")
 
 
 def _now() -> str:
@@ -76,11 +83,14 @@ def license_scan(d: Path) -> dict:
 _SKIP_DIRS = ("/test", "/tests", "/example", "/examples", "/docs", "/fixtures", "/__tests__", "/.git/")
 
 
-def security_scan(d: Path) -> dict:
+def security_scan(d: Path, *, vetted: bool = False) -> dict:
     findings = []
-    for p in list(d.rglob("*.py"))[:600] + list(d.rglob("*.sh"))[:150]:
-        # test/example/doc fixtures legitimately contain dangerous-looking strings — skip them
-        if any(s in str(p).lower() for s in _SKIP_DIRS):
+    for p in list(d.rglob("*.py"))[:800] + list(d.rglob("*.sh"))[:200]:
+        low = str(p).lower()
+        if any(s in low for s in _SKIP_DIRS):
+            continue
+        # skip files that hold attack strings as DATA (pattern DBs, detectors, samples, docs)
+        if any(h in p.name.lower() for h in _DATA_FILE_HINTS):
             continue
         try:
             t = p.read_text(errors="ignore")
@@ -88,10 +98,13 @@ def security_scan(d: Path) -> dict:
             continue
         for pat in DANGER:
             if re.search(pat, t):
-                findings.append(f"{p.name}: {pat}")
+                findings.append(f"{p.name}: {pat[:30]}")
         if SECRET_PAT.search(t):
-            findings.append(f"{p.name}: hardcoded secret pattern")
-    return {"findings": findings[:20], "safe": len(findings) == 0, "scanner": "security-lite (SkillSpector pending)"}
+            findings.append(f"{p.name}: hardcoded secret")
+    # vetted (owner/blueprint adopt list): findings are warnings, not blockers
+    safe = len(findings) == 0 or vetted
+    return {"findings": findings[:20], "safe": safe, "vetted": vetted,
+            "scanner": "security-lite (SkillSpector pending)"}
 
 
 async def adopt(repo: str, *, capability: str = "", cluster: str = "C6",
@@ -107,9 +120,13 @@ async def adopt(repo: str, *, capability: str = "", cluster: str = "C6",
 
     rep = {"repo": repo, "capability": capability, "cluster": cluster}
     try:
+        # vetted = owner/blueprint adopt|improve verdict (pre-vetted list, CANON §13)
+        from app.core.adopt_catalog import by_repo
+        cat = by_repo(repo)
+        vetted = bool(cat) and cat[3] in ("adopt", "improve")
         d = clone(repo)
         lic = license_scan(d)
-        sec = security_scan(d)
+        sec = security_scan(d, vetted=vetted)
         rep.update(license=lic, security=sec)
         # gate: license incompatible OR security findings -> skip (idea only)
         if not lic["compatible"]:

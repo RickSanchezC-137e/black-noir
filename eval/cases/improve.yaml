@@ -1,0 +1,11 @@
+id: improve_version_endpoint
+suite: improve
+input: "measurable self-improvement probe: GET /api/systems/version exists and returns build info"
+request:
+  method: GET
+  path: /api/systems/version
+expect:
+  status: 200
+  contains: ["project", "python", "version"]
+  max_latency_ms: 2000
+  violations: 0
