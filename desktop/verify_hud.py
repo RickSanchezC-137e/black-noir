@@ -43,22 +43,19 @@ def main() -> int:
 
         checks["brand = live /api/core name"] = "BLACK NOIR" in pg.inner_text("#brand").upper()
         checks["core connection online"] = "online" in pg.inner_text("#conn")
-        checks["map: 3D cloud canvas present"] = pg.locator("#map canvas").count() > 0
-        checks["map: cluster labels (C1..C6)"] = "C1" in pg.inner_text("#labels") and "C6" in pg.inner_text("#labels")
+        checks["map: 2D schema svg present"] = pg.locator("#s2svg").count() > 0
+        checks["map: schema links+nodes"] = pg.locator("#s2svg line.lnk").count() >= 6 and pg.locator("#s2svg circle.nd").count() >= 7
+        checks["map: clusters C1..C6"] = "C1" in pg.inner_text("#s2chips") and "C6" in pg.inner_text("#s2chips")
+        checks["map: packet layer present"] = pg.locator("#s2pkts").count() > 0
+        checks["map: ACTIVE counter"] = "ACTIVE" in pg.inner_text("#s2act")
+        checks["map: pulsing/live nodes"] = pg.locator("#s2svg circle.nd.live").count() > 0
         pg.screenshot(path=os.path.join(OUT, "1-map.png"))
 
-        pg.evaluate("document.querySelectorAll('#labels .lab.cl')[0].click()")
-        pg.wait_for_timeout(500)
+        # core inspector via the core node
+        pg.click("#s2svg [data-core]"); pg.wait_for_timeout(500)
         checks["map: core inspector = 4 AI"] = "Оркестратор" in pg.inner_text("#insp") and "Builder" in pg.inner_text("#insp")
         pg.screenshot(path=os.path.join(OUT, "1b-core-ai.png"))
         pg.click("#insp-x")
-
-        # 2D schema: same core->cluster->module links, live, animated flow
-        pg.click("#sb2d"); pg.wait_for_timeout(900)
-        checks["map: 2D schema links (svg lines+nodes)"] = pg.locator("#s2svg line.lnk").count() >= 6 and pg.locator("#s2svg circle.nd").count() >= 7
-        checks["map: 2D schema ACTIVE counter"] = "ACTIVE" in pg.inner_text("#s2act")
-        pg.screenshot(path=os.path.join(OUT, "1c-schema2d.png"))
-        pg.click("#sb3d"); pg.wait_for_timeout(400)
 
         def tab(name):
             pg.click(f".tab[data-go={name}]"); pg.wait_for_timeout(700)

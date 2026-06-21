@@ -58,7 +58,7 @@ async function checkUpdate() {
 
 // ---------- theme ----------
 let theme = localStorage.getItem("noir.theme") || "green";
-function applyTheme() { $("#px").classList.toggle("gold", theme === "gold"); const hex = theme === "green" ? 0x4dffa0 : 0xf5bd3a; if (window.__phos) window.__phos(hex); if (window.__facephos) window.__facephos(hex); }
+function applyTheme() { $("#px").classList.toggle("gold", theme === "gold"); const hex = theme === "green" ? 0x4dffa0 : 0xf5bd3a; if (window.__facephos) window.__facephos(hex); }
 $("#theme").onclick = () => { theme = theme === "green" ? "gold" : "green"; localStorage.setItem("noir.theme", theme); applyTheme(); };
 
 // ---------- tabs ----------
@@ -70,7 +70,7 @@ document.querySelectorAll(".tab").forEach((b) => b.onclick = () => {
   // close floating overlays so they don't linger/overlap on other tabs
   $("#insp").classList.remove("open");
   if (cur !== "chat") $("#facewin").classList.remove("on");
-  if (cur === "map" && window.__resize) window.__resize();
+  if (cur === "map") render2D();
 });
 // hotkeys Ctrl+1..6
 const TABORDER = ["map", "tasks", "chat", "sys", "ideas", "prof"];
@@ -161,116 +161,13 @@ function openInspector(kind, id) {
 // ====================================================================
 //  3D core cloud (Map) — raycaster click + camera fly-in (подлёт)
 // ====================================================================
-let phos, scene, themed = [], moduleLabels = [], rebuildNodes;
-let mode2d = false, glCanvas = null;
-let lookTarget = new THREE.Vector3(), distTarget = 430;
-function flyTo(v, dist) { lookTarget.copy(v); distTarget = dist; }
-function build3D() {
-  const map = $("#map"), labels = $("#labels");
-  let W = map.clientWidth || 900, H = map.clientHeight || 600;
-  phos = new THREE.Color(0x4dffa0);
-  scene = new THREE.Scene();
-  const cam = new THREE.PerspectiveCamera(54, W / H, .1, 6000);
-  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  r.setSize(W, H); r.setClearColor(0, 0); map.insertBefore(r.domElement, map.firstChild); glCanvas = r.domElement;
-  const mat = (o) => { const m = new THREE.MeshBasicMaterial(Object.assign({ color: phos.clone() }, o || {})); themed.push(m); return m; };
-  const lmat = (op) => { const m = new THREE.LineBasicMaterial({ color: phos.clone(), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }); themed.push(m); return m; };
-  const cv = document.createElement("canvas"); cv.width = cv.height = 128; const g = cv.getContext("2d");
-  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(.25, "rgba(255,255,255,.5)"); gr.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = gr; g.fillRect(0, 0, 128, 128); const GT = new THREE.CanvasTexture(cv);
-  const spr = (s, op) => { const m = new THREE.SpriteMaterial({ map: GT, color: phos.clone(), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: op }); themed.push(m); const p = new THREE.Sprite(m); p.scale.set(s, s, 1); return p; };
-
-  const stars = new Float32Array(330 * 3);
-  for (let i = 0; i < 330; i++) { const rr = 460 + ((i * 53) % 1400), a = i * 2.39996, b = Math.acos(((i * 7) % 330) / 165 - 1); stars[i * 3] = rr * Math.sin(b) * Math.cos(a); stars[i * 3 + 1] = rr * Math.cos(b); stars[i * 3 + 2] = rr * Math.sin(b) * Math.sin(a); }
-  const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(stars, 3));
-  scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0x2e7d5a, size: 1.7, transparent: true, opacity: .5 })));
-
-  const O = new THREE.Vector3();
-  const pickables = [];
-  const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(8, 24, 24), mat());
-  coreMesh.userData = { kind: "core" }; pickables.push(coreMesh);
-  scene.add(coreMesh); scene.add(new THREE.Mesh(new THREE.SphereGeometry(15, 18, 18), mat({ transparent: true, opacity: .16 }))); scene.add(spr(95, .5));
-
-  const mk = (t, c, onClick) => { const e = el("div", "lab" + (c ? " " + c : ""), t); if (onClick) e.onclick = onClick; labels.appendChild(e); return e; };
-  moduleLabels = [{ e: mk("NOIR", "cl", () => { openInspector("core"); flyTo(O, 430); }), get: () => O }];
-
-  const groups = {};
-  Object.entries(CLUSTERS).forEach(([cid, c]) => {
-    const v = new THREE.Vector3(c.p[0], c.p[1], c.p[2]);
-    const grp = new THREE.Group(); grp.position.copy(v); scene.add(grp); groups[cid] = { grp, v };
-    const cm = new THREE.Mesh(new THREE.SphereGeometry(5.5, 16, 16), mat()); cm.userData = { kind: "cluster", id: cid, pos: v }; grp.add(cm); pickables.push(cm);
-    grp.add(spr(30, .7));
-    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([O, v]), lmat(.3)));
-    moduleLabels.push({ e: mk(c.n, "cl", () => flyTo(v, 150)), get: () => v });
-  });
-
-  // module nodes (LIVE) — rebuilt whenever /api/modules changes
-  let nodeObjs = [], nodeLabels = [];
-  rebuildNodes = () => {
-    nodeObjs.forEach((o) => { o.parent && o.parent.remove(o); const i = pickables.indexOf(o); if (i >= 0) pickables.splice(i, 1); });
-    nodeLabels.forEach((l) => l.e.remove());
-    moduleLabels = moduleLabels.filter((l) => !nodeLabels.includes(l));
-    nodeObjs = []; nodeLabels = [];
-    const byCl = {};
-    modules.forEach((m) => { (byCl[m.cluster] = byCl[m.cluster] || []).push(m); });
-    Object.entries(byCl).forEach(([cid, mods]) => {
-      const G = groups[cid]; if (!G) return;
-      mods.forEach((m, j) => {
-        const a = j / mods.length * 6.28, lp = new THREE.Vector3(28 * Math.cos(a), (j % 2 ? 8 : -8), 28 * Math.sin(a));
-        const mm = new THREE.Mesh(new THREE.SphereGeometry(3.4, 12, 12), mat()); mm.position.copy(lp); mm.userData = { kind: "module", id: m.name }; G.grp.add(mm); nodeObjs.push(mm); pickables.push(mm);
-        const mgl = spr(11, .6); mgl.position.copy(lp); G.grp.add(mgl); nodeObjs.push(mgl);
-        const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), lp]), lmat(.35)); G.grp.add(ln); nodeObjs.push(ln);
-        const world = lp.clone().add(G.v);
-        const lab = mk(m.display_name || m.name, "mod", () => openInspector("module", m.name));
-        const entry = { e: lab, get: () => world }; nodeLabels.push(entry); moduleLabels.push(entry);
-      });
-    });
-  };
-  rebuildNodes();
-
-  window.__phos = (hex) => { phos.set(hex); themed.forEach((m) => m.color && m.color.copy(phos)); };
-
-  let th = .5, ph = 1.05, dist = 430, rot = false, lx, ly, downx, downy; const vp = new THREE.Vector3(), look = new THREE.Vector3();
-  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-  map.addEventListener("pointerdown", (e) => { if (mode2d) return; rot = true; lx = downx = e.clientX; ly = downy = e.clientY; });
-  window.addEventListener("pointermove", (e) => { if (!rot) return; th -= (e.clientX - lx) * .005; ph -= (e.clientY - ly) * .005; ph = Math.max(.2, Math.min(2.9, ph)); lx = e.clientX; ly = e.clientY; });
-  window.addEventListener("pointerup", (e) => {
-    rot = false;
-    if (mode2d || cur !== "map") return;            // 2D schema handles its own clicks
-    if (Math.abs(e.clientX - downx) > 4 || Math.abs(e.clientY - downy) > 4) return; // was a drag
-    const rect = r.domElement.getBoundingClientRect();
-    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
-    ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1; ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    ray.setFromCamera(ndc, cam);
-    const hit = ray.intersectObjects(pickables, false)[0];
-    if (!hit) { flyTo(O, 430); return; }
-    const u = hit.object.userData;
-    if (u.kind === "core") { openInspector("core"); flyTo(O, 430); }
-    else if (u.kind === "cluster") { flyTo(u.pos, 150); }       // влететь в кластер
-    else if (u.kind === "module") { openInspector("module", u.id); }
-  });
-  map.addEventListener("wheel", (e) => { if (mode2d) return; e.preventDefault(); distTarget *= (e.deltaY > 0 ? 1.1 : .9); distTarget = Math.max(60, Math.min(900, distTarget)); }, { passive: false });
-  window.__resize = () => { W = map.clientWidth || W; H = map.clientHeight || H; r.setSize(W, H); cam.aspect = W / H; cam.updateProjectionMatrix(); };
-
-  (function frame() {
-    requestAnimationFrame(frame);
-    if (cur !== "map" || mode2d) return;       // paused in 2D so nothing renders/rotates behind the schema
-    if (!rot) th += .0008;
-    look.lerp(lookTarget, 0.08); dist += (distTarget - dist) * 0.08;
-    cam.position.set(look.x + dist * Math.sin(ph) * Math.sin(th), look.y + dist * Math.cos(ph), look.z + dist * Math.sin(ph) * Math.cos(th));
-    cam.lookAt(look); r.render(scene, cam);
-    moduleLabels.forEach((l) => { vp.copy(l.get()).project(cam); if (vp.z > 1) { l.e.style.display = "none"; return; } l.e.style.display = "block"; l.e.style.left = ((vp.x * .5 + .5) * W) + "px"; l.e.style.top = ((-vp.y * .5 + .5) * H) + "px"; });
-  })();
-}
-
-// ---------- 2D schema (SVG node-link graph: same core→cluster→module links,
-//            live status, animated stroke-dashoffset flow, search + filters) ----------
 let s2q = "", s2hidden = new Set();
-const s2statusClass = (s) => s === "error" ? "err" : s === "busy" ? "busy" : s === "offline" ? "offline" : "idle";
+let s2nodes = {}, s2corePos = null;        // live SVG positions for packet animation
+const s2statusClass = (s) => s === "error" ? "err" : s === "busy" ? "busy" : s === "offline" ? "offline" : "live";
+
 function render2D() {
   const svg = $("#s2svg"); if (!svg) return;
   const cx = 500, cy = 320, cnames = Object.keys(CLUSTERS), n = cnames.length;
-  // cluster filter chips (reflect s2hidden)
   const chips = $("#s2chips"); chips.innerHTML = "";
   cnames.forEach((cid) => {
     const ch = el("span", "s2chip" + (s2hidden.has(cid) ? "" : " on"), cid); ch.title = CLUSTERS[cid].n;
@@ -280,6 +177,7 @@ function render2D() {
   const byCl = {}; modules.forEach((m) => { (byCl[m.cluster] = byCl[m.cluster] || []).push(m); });
   const pos = {};
   cnames.forEach((cid, i) => { const a = -Math.PI / 2 + i * (2 * Math.PI / n); pos[cid] = { x: cx + 200 * Math.cos(a), y: cy + 200 * Math.sin(a), a }; });
+  s2nodes = {}; s2corePos = { x: cx, y: cy };
   const parts = []; let active = 0, total = 0;
   cnames.forEach((cid) => {
     if (s2hidden.has(cid)) return;
@@ -289,6 +187,7 @@ function render2D() {
     mods.forEach((m, j) => {
       total++; if (m.status === "busy" || m.status === "idle") active++;
       const a = p.a + (j - (k - 1) / 2) * spread, mx = p.x + 120 * Math.cos(a), my = p.y + 120 * Math.sin(a);
+      s2nodes[m.name] = { x: mx, y: my };
       const dim = (!s2q || (m.display_name || m.name).toLowerCase().includes(s2q)) ? "" : " dim";
       const anchor = Math.cos(a) < -0.25 ? "end" : Math.cos(a) > 0.25 ? "start" : "middle";
       const tx = mx + 11 * Math.cos(a), ty = my + 11 * Math.sin(a);
@@ -296,19 +195,55 @@ function render2D() {
       parts.push(`<circle class="nd glow ${s2statusClass(m.status)}${dim}" data-mod="${esc(m.name)}" cx="${mx.toFixed(1)}" cy="${my.toFixed(1)}" r="6"><title>${esc(m.display_name || m.name)} · ${esc(m.status)}</title></circle>`);
       parts.push(`<text class="${dim.trim()}" x="${tx.toFixed(1)}" y="${(ty + 3).toFixed(1)}" text-anchor="${anchor}">${esc(m.display_name || m.name)}</text>`);
     });
-    parts.push(`<circle class="nd glow" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="11"><title>${esc(CLUSTERS[cid].n)}</title></circle>`);
+    parts.push(`<circle class="nd glow live" data-cl="${cid}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="11"><title>${esc(CLUSTERS[cid].n)}</title></circle>`);
     parts.push(`<text class="cl" x="${p.x.toFixed(1)}" y="${(p.y - 16).toFixed(1)}" text-anchor="middle">${esc(cid)}</text>`);
   });
-  parts.push(`<circle class="nd glow" data-core="1" cx="${cx}" cy="${cy}" r="22"/>`);
+  parts.push(`<circle class="nd glow live core" data-core="1" cx="${cx}" cy="${cy}" r="22"/>`);
   parts.push(`<text class="cl" x="${cx}" y="${cy + 4}" text-anchor="middle">NOIR</text>`);
+  parts.push(`<g id="s2pkts"></g>`);
   svg.innerHTML = parts.join("");
   svg.querySelectorAll("[data-mod]").forEach((c) => c.onclick = () => openInspector("module", c.getAttribute("data-mod")));
   const ce = svg.querySelector("[data-core]"); if (ce) ce.onclick = () => openInspector("core");
   $("#s2act").textContent = total ? `${active}/${total} ACTIVE` : "нет модулей";
 }
 $("#s2search").addEventListener("input", (e) => { s2q = e.target.value.trim().toLowerCase(); render2D(); });
-$("#sb3d").onclick = () => { mode2d = false; if (glCanvas) glCanvas.style.display = ""; $("#sb3d").classList.add("on"); $("#sb2d").classList.remove("on"); $("#schema2d").classList.add("hidden"); $("#labels").classList.remove("hidden"); $("#maphint").style.display = ""; if (window.__resize) window.__resize(); };
-$("#sb2d").onclick = () => { mode2d = true; if (glCanvas) glCanvas.style.display = "none"; $("#sb2d").classList.add("on"); $("#sb3d").classList.remove("on"); $("#schema2d").classList.remove("hidden"); $("#labels").classList.add("hidden"); $("#maphint").style.display = "none"; render2D(); };
+
+// data-exchange packets travelling along the links (live activity)
+let packets = [];
+function spawnPacket(from, to) {
+  const g = $("#s2pkts"); if (!g || !from || !to) return;
+  const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  c.setAttribute("r", "3.2"); c.setAttribute("class", "pkt");
+  c.setAttribute("cx", from.x); c.setAttribute("cy", from.y);
+  g.appendChild(c); packets.push({ el: c, from, to, t0: performance.now(), dur: 850 });
+}
+function fireExchange(moduleName) {
+  const nd = s2nodes[moduleName]; if (!nd || !s2corePos) return;
+  spawnPacket(s2corePos, nd); setTimeout(() => spawnPacket(nd, s2corePos), 260);
+}
+(function animatePackets() {
+  requestAnimationFrame(animatePackets);
+  if (!packets.length || cur !== "map") return;
+  const now = performance.now();
+  for (let i = packets.length - 1; i >= 0; i--) {
+    const p = packets[i], t = (now - p.t0) / p.dur;
+    if (t >= 1) { p.el.remove(); packets.splice(i, 1); continue; }
+    p.el.setAttribute("cx", (p.from.x + (p.to.x - p.from.x) * t).toFixed(1));
+    p.el.setAttribute("cy", (p.from.y + (p.to.y - p.from.y) * t).toFixed(1));
+    p.el.setAttribute("opacity", (t < .12 ? t * 8 : t > .88 ? (1 - t) * 8 : 1).toFixed(2));
+  }
+})();
+
+// detect live activity from the Governor audit → animate exchanges between core & modules
+let seenAudit = null;
+async function pumpActivity() {
+  try {
+    const g = await api("/api/governor/audit?limit=25"); const rows = g.audit || [];
+    const key = (a) => `${a.created_at}|${a.module}|${a.tool}`;
+    if (seenAudit) rows.forEach((a) => { if (!seenAudit.has(key(a))) fireExchange(a.module); });
+    seenAudit = new Set(rows.map(key));
+  } catch (e) {}
+}
 
 // ====================================================================
 //  TASKS — kanban + inspector ИНФО/ЛОГ/ВЕТВЬ/ЧАТ (live)
@@ -605,7 +540,7 @@ async function loadCore() {
   } catch (e) { setConn("нет связи с ядром", false); $("#vbub").textContent = "Нет связи с ядром…"; }
 }
 async function loadModules() {
-  try { const d = await api("/api/modules"); modules = d.modules || []; if (rebuildNodes) rebuildNodes(); if (!$("#schema2d").classList.contains("hidden")) render2D(); } catch (e) {}
+  try { const d = await api("/api/modules"); modules = d.modules || []; render2D(); } catch (e) {}
 }
 
 // live notifications derived from real diffs (new tasks/ideas) + /ws/notify
@@ -630,12 +565,13 @@ function wsNotify() {
 
 async function refresh() {
   await loadCore();
-  await Promise.all([loadModules(), loadSystems(), loadTasks(), loadIdeas(), loadProfile(), diffNotify()]);
+  await Promise.all([loadModules(), loadSystems(), loadTasks(), loadIdeas(), loadProfile(), diffNotify(), pumpActivity()]);
 }
 
 // ---------- boot ----------
 applyTheme();
-try { build3D(); } catch (e) { console.warn("3D unavailable (no WebGL?)", e); $("#labels").innerHTML = "<div class='empty' style='position:absolute;top:60px;left:14px'>3D-облако недоступно (нет WebGL) — используйте 2D СХЕМУ</div>"; }
+render2D();
+window.addEventListener("contextmenu", (e) => e.preventDefault());  // no browser context menu (save-image etc.)
 setupWindow();
 loadBotStatus();
 refresh(); setInterval(refresh, 5000);

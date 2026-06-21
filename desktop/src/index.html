@@ -64,6 +64,12 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 #s2svg text{fill:currentColor;font-family:var(--mono);font-size:10px;pointer-events:none}
 #s2svg text.dim{opacity:.18}
 #s2svg text.cl{font-size:11px;letter-spacing:1px;text-shadow:0 0 5px currentColor}
+#s2svg .nd.live{animation:s2pulse 2.3s ease-in-out infinite}
+#s2svg .nd.busy{fill:#ffd24d;animation:s2busy .85s ease-in-out infinite}
+#s2svg .nd.core{animation:s2pulse 3s ease-in-out infinite}
+@keyframes s2pulse{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes s2busy{0%,100%{opacity:.6}50%{opacity:1}}
+#s2svg .pkt{fill:currentColor;filter:drop-shadow(0 0 5px currentColor)}
 .cols{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:12px 14px;font-size:11px}
 .col h4{margin:0 0 8px;font-size:11px;letter-spacing:1px;opacity:.75}
 .mod{border:1px solid rgba(127,127,127,.4);border-radius:5px;padding:7px 9px;margin-bottom:7px;cursor:pointer}
@@ -171,14 +177,12 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 
   <div class="screen" id="screen">
     <div class="pane" data-tab="map" id="map">
-      <div class="ttl gl">КАРТА · ОБЛАКО ЯДРА</div>
-      <div class="sub"><button class="sb on" id="sb3d">3D ОБЛАКО</button><button class="sb" id="sb2d">2D СХЕМА</button></div>
-      <div class="labels" id="labels"></div>
-      <div class="schema2d hidden" id="schema2d">
+      <div class="ttl gl">КАРТА · СХЕМА ЯДРА</div>
+      <div class="schema2d" id="schema2d">
         <div class="s2bar"><input id="s2search" placeholder="поиск модуля…" autocomplete="off"/><span class="s2chips" id="s2chips"></span><span class="s2act" id="s2act">—</span></div>
         <svg id="s2svg" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet"></svg>
       </div>
-      <div class="hint" id="maphint">тащи — вращать · колесо — приближать · клик по ядру — состав ИИ · по модулю — инспектор</div>
+      <div class="hint" id="maphint">клик по ядру — состав ИИ · по модулю — инспектор · подсветка = модуль активен · импульс по линии = обмен данными</div>
     </div>
 
     <div class="pane hidden" data-tab="tasks"><div class="ttl gl">ЗАДАЧИ</div><div class="kb" id="tasks"></div></div>
