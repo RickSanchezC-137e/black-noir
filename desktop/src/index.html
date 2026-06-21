@@ -160,6 +160,20 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 .idea .m{font-size:10px;opacity:.6;margin-top:3px}
 .tk{cursor:pointer}
 .tlog{font-size:10px;opacity:.8;margin:2px 0;white-space:pre-wrap}
+#modview{position:absolute;inset:0;z-index:23;background:rgba(0,10,6,.97);display:none;flex-direction:column}
+#px.gold #modview{background:rgba(16,11,2,.97)}
+#modview.on{display:flex}
+.mvh{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid currentColor;font-size:13px;letter-spacing:1px}
+.mvh #mv-sub{opacity:.6;font-size:11px}
+.mvh .x{margin-left:auto;cursor:pointer;border:1px solid currentColor;border-radius:3px;padding:1px 9px}
+.mvtabs{display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid rgba(127,127,127,.5)}
+.mvtab{font-size:11px;border:1px solid currentColor;border-radius:3px;padding:4px 10px;cursor:pointer;opacity:.6}
+.mvtab.on{opacity:1;text-shadow:0 0 6px currentColor}
+.mvbody{flex:1;overflow:auto;padding:14px;font-size:12px}
+.mvkb{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.mvkb h4{margin:0 0 8px;opacity:.75;font-size:11px;letter-spacing:1px}
+.mvcard{border:1px solid rgba(127,127,127,.55);border-radius:5px;padding:7px 9px;margin-bottom:7px;font-size:11px}
+.mvcard .m{font-size:10px;opacity:.6;margin-top:3px}
 </style>
 </head>
 <body>
@@ -244,6 +258,8 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
     <!-- draggable particle "face" of the core (chat ВИЗУАЛ) -->
     <div id="facewin"><div class="fh" id="facehead"><span class="gl">ВИЗУАЛ</span><span class="vmodes"><span class="vmode on" data-vm="face">ЛИЦО</span><span class="vmode" data-vm="chart">ГРАФИКИ</span><span class="vmode" data-vm="img">КАДР</span></span><span class="x" id="faceclose">✕</span></div><canvas id="facecv"></canvas><canvas id="vchart" style="display:none"></canvas><div id="vimg" style="display:none"></div></div>
 
+    <div id="modview"><div class="mvh"><span id="mv-title" class="gl">—</span><span id="mv-sub"></span><span class="x" id="mv-x">✕</span></div>
+      <div class="mvtabs" id="mv-tabs"></div><div class="mvbody" id="mv-body"></div></div>
     <div class="notifs" id="notifs"></div>
     <div class="vbro" id="vbro">
       <div class="vbport" id="vbport" title="помощник по системе — нажми, чтобы спросить"><span class="vbx" id="vbhide" title="скрыть">✕</span><svg viewBox="0 0 200 230" width="64" height="74" style="display:block;filter:drop-shadow(0 0 4px currentColor)"><g id="vbFig" fill="none" stroke="#03110a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">

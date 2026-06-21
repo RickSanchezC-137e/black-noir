@@ -69,6 +69,42 @@ async def analysis():
     return await self_analysis.latest()
 
 
+@router.get("/board")
+async def board():
+    """Full self-improvement dashboard: hypotheses (kanban), experiments, versions, budget, analysis."""
+    import aiosqlite
+    from app.config import settings
+    out = {"hypotheses": [], "experiments": [], "versions": [], "audit": []}
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT id,summary,intent,kind,domain,status,priority,created_at"
+                               " FROM si_hypotheses ORDER BY created_at DESC LIMIT 60")
+        out["hypotheses"] = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute("SELECT id,hypothesis_id,domain,status,started_at,finished_at"
+                               " FROM si_experiments ORDER BY started_at DESC LIMIT 25")
+        out["experiments"] = [dict(r) for r in await cur.fetchall()]
+        try:
+            cur = await db.execute("SELECT domain,version,exp_id,token,active,created_at FROM si_versions ORDER BY rowid DESC LIMIT 12")
+            out["versions"] = [dict(r) for r in await cur.fetchall()]
+        except aiosqlite.OperationalError:
+            cur = await db.execute("SELECT * FROM si_versions ORDER BY rowid DESC LIMIT 12")
+            out["versions"] = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute("SELECT module,tool,decision,action_class,ok,created_at FROM agent_log"
+                               " WHERE module IN ('selfimprove','adoption','core','canary') ORDER BY id DESC LIMIT 20")
+        out["audit"] = [dict(r) for r in await cur.fetchall()]
+    try:
+        from app.core import budget
+        out["budget"] = budget.status()
+    except Exception:  # noqa: BLE001
+        out["budget"] = {}
+    try:
+        from app.core import self_analysis
+        out["analysis"] = await self_analysis.latest()
+    except Exception:  # noqa: BLE001
+        out["analysis"] = {}
+    return out
+
+
 @router.post("/run")
 async def run(body: RunIn):
     """One self-improvement iteration: scout->build->eval gate->governor->promote/reject."""

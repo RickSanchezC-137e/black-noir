@@ -125,6 +125,57 @@ let vbTalk = 0;
 // ====================================================================
 const insp = $("#insp"), inspTabs = $("#insp-tabs"), inspBody = $("#insp-body");
 $("#insp-x").onclick = () => insp.classList.remove("open");
+
+// ====================================================================
+//  Full module view (#modview) — open a module as a complete tab
+// ====================================================================
+const mv = $("#modview");
+$("#mv-x").onclick = () => mv.classList.remove("on");
+function mvOpen(title, sub) { mv.classList.add("on"); $("#mv-title").textContent = title; $("#mv-sub").textContent = sub || ""; }
+function mvTabset(defs, def) {
+  const tabs = $("#mv-tabs"), body = $("#mv-body"); tabs.innerHTML = ""; let active = def;
+  const render = async () => {
+    tabs.querySelectorAll(".mvtab").forEach((x) => x.classList.toggle("on", x.dataset.k === active));
+    body.innerHTML = "<div class='empty'>загрузка…</div>";
+    try { await defs.find((d) => d[0] === active)[2](body); } catch (e) { body.innerHTML = `<div class='empty'>нет данных (${esc(e.message)})</div>`; }
+  };
+  defs.forEach(([k, lbl]) => { const t = el("span", "mvtab", lbl); t.dataset.k = k; t.onclick = () => { active = k; render(); }; tabs.appendChild(t); });
+  render();
+}
+function openModule(id) {
+  if (id === "selfimprove") return openSelfImprove();
+  const m = modules.find((x) => x.name === id) || { name: id };
+  mvOpen(m.display_name || m.name, (m.cluster || "") + " · " + (m.status || ""));
+  mvTabset([
+    ["overview", "ОБЗОР", async (b) => { b.innerHTML = `<div class="row"><span>статус</span><span class="chip">${esc(m.status)}</span></div><div class="row"><span>кластер</span><span>${esc(m.cluster)}</span></div><div class="row"><span>версия</span><span>v${esc(m.version)}</span></div><div class="row"><span>инструменты</span><span>${esc((m.tools || []).join(", "))}</span></div>`; }],
+    ["logs", "ЛОГИ", async (b) => { const d = await api(`/api/modules/${id}/logs?tail=60`); b.innerHTML = (d.logs || []).map((l) => `<div class="tlog">${esc((l.ts || "").slice(11, 19))} [${esc(l.level)}] ${esc(l.event)} ${esc(l.payload || "")}</div>`).join("") || "<div class='empty'>нет логов</div>"; }],
+    ["mem", "ПАМЯТЬ", async (b) => { const d = await api(`/api/memory?module=${id}`); b.innerHTML = (d.items || []).map((x) => `<div class="row"><span>${esc(x.value)}</span><span class="chip">${esc(x.type || x.key)}</span></div>`).join("") || "<div class='empty'>нет данных</div>"; }],
+    ["cfg", "НАСТРОЙКИ", async (b) => { b.innerHTML = `<div class="row"><span>включён</span><span class="chip">${m.enabled ? "да" : "нет"}</span></div><div style="margin-top:9px"><button class="ico" id="mv-tog">${m.enabled ? "ОТКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button></div>`; const t = $("#mv-tog"); if (t) t.onclick = async () => { await api(`/api/modules/${id}/${m.enabled ? "disable" : "enable"}`, { method: "POST" }); await loadModules(); openModule(id); }; }],
+    ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:" + id, "агенту " + id + "…")],
+  ], "overview");
+}
+function openSelfImprove() {
+  mvOpen("САМОУЛУЧШЕНИЕ", "C4 · автономный контур 24/7");
+  const HCOLS = [["ОЧЕРЕДЬ", ["queued", "new"]], ["ПРИНЯТО", ["promoted", "confirmed"]], ["ОТКЛОНЕНО", ["rejected", "skip"]]];
+  mvTabset([
+    ["overview", "ОБЗОР", async (b) => {
+      const d = await api("/api/systems/selfimprove/board"); const bd = d.budget || {}, a = (d.analysis || {}).signals || {};
+      b.innerHTML = `<div class="syswrap"><div class="card"><h5>КОНТУР</h5><div class="row"><span>Гипотез</span><span>${d.hypotheses.length}</span></div><div class="row"><span>Экспериментов</span><span>${d.experiments.length}</span></div><div class="row"><span>Версий</span><span>${d.versions.length}</span></div></div><div class="card"><h5>БЮДЖЕТ (сегодня)</h5>${Object.entries(bd).map(([k, v]) => `<div class="row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join("") || "<div class='empty'>—</div>"}</div></div><div style="padding:10px 0"><button class="ico" id="mv-an">ЗАПУСТИТЬ САМОАНАЛИЗ</button> <span class="vlbl">сигналов: ${a.total_findings || 0}</span></div>`;
+      const an = $("#mv-an"); if (an) an.onclick = async () => { an.textContent = "…"; await api("/api/systems/selfimprove/analyze", { method: "POST" }); toast("Самоанализ выполнен"); openSelfImprove(); };
+    }],
+    ["hyps", "ГИПОТЕЗЫ", async (b) => {
+      const d = await api("/api/systems/selfimprove/board");
+      b.innerHTML = `<div class="mvkb">${HCOLS.map(([lbl, sts]) => { const here = d.hypotheses.filter((h) => sts.includes(h.status)); return `<div><h4>${lbl} · ${here.length}</h4>${here.map((h) => `<div class="mvcard">${esc(h.summary || h.intent || h.id)}<div class="m">${esc(h.kind || "")} · ${esc(h.domain || "")} · prio ${h.priority ?? ""}</div></div>`).join("") || "<div class='empty'>—</div>"}</div>`; }).join("")}</div>`;
+    }],
+    ["exp", "ЭКСПЕРИМЕНТЫ/ВЕРСИИ", async (b) => {
+      const d = await api("/api/systems/selfimprove/board");
+      b.innerHTML = `<h5>ЭКСПЕРИМЕНТЫ</h5>` + (d.experiments.map((e) => `<div class="mvcard">${esc(e.domain)} <span class="chip">${esc(e.status)}</span><div class="m">${esc((e.started_at || "").slice(0, 19).replace("T", " "))}</div></div>`).join("") || "<div class='empty'>—</div>") + `<h5 style="margin-top:12px">ВЕРСИИ</h5>` + (d.versions.map((v) => `<div class="row"><span>${esc(v.domain || "")} v${esc(v.version ?? "")}</span><span class="chip">${v.active ? "активна" : ""}</span></div>`).join("") || "<div class='empty'>—</div>");
+    }],
+    ["activity", "ЛОГ КОНТУРА", async (b) => { const d = await api("/api/systems/selfimprove/board"); b.innerHTML = (d.audit || []).map((a) => `<div class="tlog">${esc((a.created_at || "").slice(11, 19))} ${esc(a.module)}.${esc(a.tool)} → ${esc(a.decision)} ${a.ok ? "ok" : "fail"}</div>`).join("") || "<div class='empty'>—</div>"; }],
+    ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:selfimprove", "агенту самоулучшения…")],
+  ], "overview");
+}
+
 function drawer(title) { insp.classList.add("open"); $("#insp-title").textContent = title; inspTabs.innerHTML = ""; inspBody.innerHTML = ""; }
 function tabset(defs, def) {
   let active = def;
@@ -196,6 +247,7 @@ function render2D() {
     chips.appendChild(ch);
   });
   const byCl = {}; modules.forEach((m) => { (byCl[m.cluster] = byCl[m.cluster] || []).push(m); });
+  (byCl.C4 = byCl.C4 || []).unshift({ name: "selfimprove", display_name: "Самоулучшение", status: "busy" });
   const pos = {};
   cnames.forEach((cid, i) => { const a = -Math.PI / 2 + i * (2 * Math.PI / n); pos[cid] = { x: cx + 200 * Math.cos(a), y: cy + 200 * Math.sin(a), a }; });
   s2nodes = {}; s2corePos = { x: cx, y: cy };
@@ -223,7 +275,7 @@ function render2D() {
   parts.push(`<text class="cl" x="${cx}" y="${cy + 4}" text-anchor="middle">NOIR</text>`);
   parts.push(`<g id="s2pkts"></g>`);
   svg.innerHTML = parts.join("");
-  svg.querySelectorAll("[data-mod]").forEach((c) => c.onclick = () => openInspector("module", c.getAttribute("data-mod")));
+  svg.querySelectorAll("[data-mod]").forEach((c) => c.onclick = () => openModule(c.getAttribute("data-mod")));
   const ce = svg.querySelector("[data-core]"); if (ce) ce.onclick = () => openInspector("core");
   $("#s2act").textContent = total ? `${active}/${total} ACTIVE` : "нет модулей";
 }
