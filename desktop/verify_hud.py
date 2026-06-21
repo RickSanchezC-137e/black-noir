@@ -66,7 +66,7 @@ def main() -> int:
 
         tab("chat")
         checks["chat: voice equalizer + visual btn"] = pg.locator("#eq").count() > 0 and pg.locator("#visual").count() > 0
-        checks["chat: 3 channels (mediator/core/claude_code)"] = pg.locator(".chtab").count() == 3 and "ПЕРЕДАТЧИК" in pg.inner_text(".chsw") and "CLAUDE CODE" in pg.inner_text(".chsw")
+        checks["chat: channels (mediator/core/cc/council)"] = pg.locator(".chtab").count() == 4 and "ПЕРЕДАТЧИК" in pg.inner_text(".chsw") and "СОВЕТ" in pg.inner_text(".chsw")
         pg.click("#visual"); pg.wait_for_timeout(800)
         checks["chat: visual face window opens"] = pg.locator("#facewin.on").count() > 0
         pg.screenshot(path=os.path.join(OUT, "3-chat.png"))

@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.config import settings
-from app.core import claude, claude_code, mediator, memory
+from app.core import claude, claude_code, council, mediator, memory
 
 router = APIRouter(prefix="/api")
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api")
 #   core        — direct dialogue with the core orchestrator
 #   mediator    — Передатчик: consolidates owner msgs → task → concise essence
 #   claude_code — headless Claude Code coding agent (read-only chat)
-_AGENTS = {"core", "mediator", "claude_code", "guide"}
+_AGENTS = {"core", "mediator", "claude_code", "guide", "council"}
 
 # Volt-Bro — onboard system guide (companion). Concise answers about how the
 # system is built + quick questions. Knowledge of the canonical architecture.
@@ -50,6 +50,7 @@ class ChatOut(BaseModel):
     task: str | None = None        # mediator: the task actually sent to the core
     core_reply: str | None = None  # mediator: the full (detailed) core answer
     cc_session: str | None = None  # claude_code: CLI session id to resume next turn
+    members: list | None = None    # council: per-model {provider, ok, ms}
 
 
 async def _history(sid: str, limit: int = 20) -> list[dict]:
@@ -199,6 +200,9 @@ async def chat(body: ChatIn):
     elif agent == "claude_code":
         r = await claude_code.ask(body.message, resume=body.cc_session)
         out.reply, out.cc_session = r["reply"], r["session"]
+    elif agent == "council":
+        r = await council.deliberate(body.message, hist)
+        out.reply, out.members = r["reply"], r["members"]
     elif agent == "guide":
         out.reply, _, _ = await claude.chat_as(_GUIDE_SYS + (("\n\n" + mem) if mem else ""), body.message, hist)
     else:

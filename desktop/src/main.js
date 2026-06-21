@@ -422,7 +422,7 @@ $("#msg").addEventListener("paste", (e) => { const items = e.clipboardData?.item
 
 // Channels (06_desktop.md §6.3): Передатчик / Ядро / Claude Code — each with
 // persistent per-channel history + session, kept in localStorage.
-const CHANNELS = { mediator: "ПЕРЕДАТЧИК", core: "ЯДРО", claude_code: "CLAUDE CODE" };
+const CHANNELS = { mediator: "ПЕРЕДАТЧИК", core: "ЯДРО", claude_code: "CLAUDE CODE", council: "СОВЕТ" };
 let ch = localStorage.getItem("noir.ch") || "mediator";
 let drafts = [];
 const chKey = (c) => "noir.chat." + c;
@@ -447,7 +447,7 @@ function switchChannel(c) {
   ch = c; localStorage.setItem("noir.ch", c); drafts = [];
   document.querySelectorAll(".chtab").forEach((b) => b.classList.toggle("on", b.dataset.ch === c));
   $("#msg").placeholder = c === "mediator" ? "реплика… (Enter — в буфер, кнопка — собрать и отправить ядру)"
-    : c === "claude_code" ? "вопрос Claude Code…" : "сообщение ядру…";
+    : c === "claude_code" ? "вопрос Claude Code…" : c === "council" ? "вопрос совету (Opus+DeepSeek+Gemini)…" : "сообщение ядру…";
   $("#send").textContent = c === "mediator" ? "⮞" : "→";
   renderDrafts(); renderChat();
 }
@@ -471,6 +471,7 @@ async function sendChat() {
       body: JSON.stringify({ message: text, agent: ch, session_id: st.sid || null, cc_session: st.cc || null }) });
     st.sid = r.session_id; if (r.cc_session) st.cc = r.cc_session; chSet(ch, st);
     if (ch === "mediator" && r.task) { appendMsg("sys", "→ ядру: " + r.task); pushHist(ch, "sys", "→ ядру: " + r.task); }
+    if (ch === "council" && r.members) { const ln = "совет: " + r.members.map((m) => m.provider + (m.ok ? " ✓" : " ✗")).join(" · "); appendMsg("sys", ln); pushHist(ch, "sys", ln); }
     bubble.textContent = pickReply(r) || "(пустой ответ)"; pushHist(ch, "ai", bubble.textContent); faceSpeak(0.7);
   } catch (e) { bubble.textContent = "[нет связи с ядром]"; bubble.className = "msg sys"; }
   $("#chatlog").scrollTop = 1e9;

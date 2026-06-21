@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     claude_code_bin: str = "claude"
     llm_max_tokens: int = 4096
 
+    # Council of models (multi-LLM core). Missing key → that member is skipped.
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+    council_timeout_s: float = 30.0
+
     # Search / integrations
     tavily_api_key: str = ""
     telegram_bot_token: str = ""

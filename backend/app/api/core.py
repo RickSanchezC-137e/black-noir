@@ -45,6 +45,7 @@ async def core_status():
         ],
         "stats": [{"value": settings.embedding_model, "label": "embeddings"},
                   {"value": "384", "label": "dim"}],
+        "council": __import__("app.core.providers", fromlist=["roster"]).roster(),
     }
 
 
