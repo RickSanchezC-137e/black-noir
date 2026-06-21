@@ -141,13 +141,18 @@ async def adopt(repo: str, *, capability: str = "", cluster: str = "C6",
 def _record(rep: dict) -> None:
     import sqlite3
     con = sqlite3.connect(settings.sqlite_path)
+    try:
+        con.execute("ALTER TABLE si_adoptions ADD COLUMN reason TEXT")
+        con.commit()
+    except sqlite3.OperationalError:
+        pass
     con.execute(
-        "INSERT INTO si_adoptions(repo,capability,cluster,verdict,license,security,eval,status,decided_at)"
-        " VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(repo) DO UPDATE SET verdict=excluded.verdict,"
-        " eval=excluded.eval, status=excluded.status, decided_at=excluded.decided_at",
+        "INSERT INTO si_adoptions(repo,capability,cluster,verdict,license,security,eval,status,reason,decided_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(repo) DO UPDATE SET verdict=excluded.verdict,"
+        " eval=excluded.eval, status=excluded.status, reason=excluded.reason, decided_at=excluded.decided_at",
         (rep["repo"], rep.get("capability"), rep.get("cluster"), rep.get("verdict"),
          json.dumps(rep.get("license", {})), json.dumps(rep.get("security", {})),
-         json.dumps(rep.get("eval", {})), rep.get("module_id", ""), _now()))
+         json.dumps(rep.get("eval", {})), rep.get("module_id", ""), rep.get("reason", ""), _now()))
     con.commit()
     con.close()
 
@@ -157,8 +162,12 @@ def list_adoptions() -> list[dict]:
     con = sqlite3.connect(settings.sqlite_path)
     con.row_factory = sqlite3.Row
     try:
-        rows = [dict(r) for r in con.execute("SELECT repo,capability,verdict,decided_at FROM si_adoptions ORDER BY decided_at DESC")]
+        rows = [dict(r) for r in con.execute(
+            "SELECT repo,capability,cluster,verdict,reason,status,decided_at FROM si_adoptions ORDER BY decided_at DESC")]
     except sqlite3.OperationalError:
-        rows = []
+        try:
+            rows = [dict(r) for r in con.execute("SELECT repo,capability,verdict,decided_at FROM si_adoptions ORDER BY decided_at DESC")]
+        except sqlite3.OperationalError:
+            rows = []
     con.close()
     return rows

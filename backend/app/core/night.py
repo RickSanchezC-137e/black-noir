@@ -18,36 +18,30 @@ import sys
 from pathlib import Path
 
 from app.config import settings
-from app.core import adoption, budget, builder, selfimprove
+from app.core import adopt_catalog, adoption, budget, builder, selfimprove
 from app.core.integrators import glances_integrator
 
 REPO = Path("/home/jarvis/noir")
 
-# First-night targets (11_adoption.md §A). integrator wired only for proven-simple ones.
-TARGETS = [
-    {"repo": "nicolargo/glances", "capability": "live host metrics", "cluster": "C6", "integrator": glances_integrator},
-    {"repo": "chopratejas/headroom", "capability": "context compression", "cluster": "C2", "integrator": None},
-    {"repo": "DeusData/codebase-memory-mcp", "capability": "code knowledge graph", "cluster": "C4", "integrator": None},
-    {"repo": "NVIDIA/SkillSpector", "capability": "AI module security scan", "cluster": "C5", "integrator": None},
-    {"repo": "duplicati/duplicati", "capability": "encrypted scheduled backups", "cluster": "C5", "integrator": None},
-]
-
 
 async def night_tick() -> dict:
-    """One budget-gated night iteration: adopt next target + a scout self-improve tick."""
+    """One budget-gated night iteration: seed catalog verdicts, scan next clone candidate,
+    run a scout self-improve tick."""
+    # always seed blueprint verdicts so the morning review list is complete (cheap, no clone)
+    seeded = adopt_catalog.seed()
+
     ok, why = budget.can_spend()
     if not ok:
-        return {"ran": False, "reason": why, "budget": budget.status()}
+        return {"ran": False, "reason": why, "seeded": seeded, "budget": budget.status()}
 
-    out = {"ran": True, "actions": []}
-    # 1) adoption of next un-evaluated target
-    done = {a["repo"] for a in adoption.list_adoptions()}
-    nxt = next((t for t in TARGETS if t["repo"] not in done), None)
-    if nxt and budget.status()["adopt_clones"] < settings.selfimprove_max_adopt_clones:
+    out = {"ran": True, "seeded": seeded, "actions": []}
+    # 1) real adoption pipeline for the next clone-candidate (within clone budget)
+    cand = adopt_catalog.next_clone_candidate()
+    if cand and budget.status()["adopt_clones"] < settings.selfimprove_max_adopt_clones:
+        repo, cap, cl, integ = cand
         budget.charge(requests=1, clones=1)
-        rep = await adoption.adopt(nxt["repo"], capability=nxt["capability"],
-                                   cluster=nxt["cluster"], integrate=nxt["integrator"])
-        out["actions"].append({"adopt": nxt["repo"], "verdict": rep.get("verdict"),
+        rep = await adoption.adopt(repo, capability=cap, cluster=cl, integrate=integ)
+        out["actions"].append({"adopt": repo, "verdict": rep.get("verdict"),
                                "reason": rep.get("reason"), "module": rep.get("module_id")})
 
     # 2) a self-improvement scout tick (light)

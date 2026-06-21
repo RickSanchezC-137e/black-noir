@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS si_budget_ledger (
 -- adoption registry mirror (verdicts also written to 11_adoption.md)
 CREATE TABLE IF NOT EXISTS si_adoptions (
     repo TEXT PRIMARY KEY, capability TEXT, cluster TEXT, verdict TEXT, license TEXT,
-    security TEXT, eval TEXT, status TEXT, decided_at TEXT
+    security TEXT, eval TEXT, status TEXT, reason TEXT, decided_at TEXT
 );
 
 -- Ideas (C4 idea bot / generator)

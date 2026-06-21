@@ -30,28 +30,48 @@ def build_report() -> str:
     promoted = _q(con, "SELECT COUNT(*) n FROM si_hypotheses WHERE status='promoted'")[0]["n"]
     rejected = _q(con, "SELECT COUNT(*) n FROM si_hypotheses WHERE status='rejected'")[0]["n"]
     champs = _q(con, "SELECT domain,version FROM si_versions WHERE active=1")
-    adopts = _q(con, "SELECT repo,verdict FROM si_adoptions ORDER BY decided_at DESC")
+    try:
+        adopts = [dict(r) for r in _q(con, "SELECT repo,verdict,reason FROM si_adoptions ORDER BY decided_at DESC")]
+    except sqlite3.OperationalError:
+        adopts = [dict(r) for r in _q(con, "SELECT repo,verdict FROM si_adoptions ORDER BY decided_at DESC")]
     fails = _q(con, "SELECT COUNT(*) n FROM agent_log WHERE decision='ALLOW' AND ok=0")[0]["n"]
     audit_n = _q(con, "SELECT COUNT(*) n FROM agent_log")[0]["n"]
     con.close()
 
-    a = {"adopt": 0, "improve": 0, "skip": 0, "defer": 0}
+    by = {"adopt": [], "improve": [], "skip": [], "defer": []}
     for r in adopts:
-        a[r["verdict"]] = a.get(r["verdict"], 0) + 1
+        by.setdefault(r["verdict"], []).append(r)
+
+    def _short(r):
+        rs = (r.get("reason") or "").replace("blueprint verdict; ", "")
+        return f"{r['repo'].split('/')[-1]}" + (f" — {rs[:60]}" if rs else "")
+
     lines = [
         f"🌙 {settings.project_name} — отчёт за ночь ({day})",
         "",
         f"♻️ Самоулучшение: промоутнуто {promoted}, отклонено {rejected}",
-        f"🏆 Champion-версии: " + (", ".join(f"{c['domain']}@v{c['version']}" for c in champs) or "—"),
-        f"🧩 Adoption: adopt {a['adopt']} · improve {a['improve']} · skip {a['skip']} · defer {a['defer']}",
-        "   " + (", ".join(f"{r['repo'].split('/')[-1]}={r['verdict']}" for r in adopts) or "—"),
+        "🏆 Champion-версии (откат: /api/systems/selfimprove/rollback {token}):",
+    ]
+    lines += ["   • " + (", ".join(f"{c['domain']}@v{c['version']}" for c in champs) or "—")]
+    lines += ["", f"🧩 ВЕРДИКТЫ НА РЕВЬЮ — {len(adopts)} репозиториев:"]
+    if by["adopt"]:
+        lines.append("✅ ADOPT (внедрено/кандидат): " + ", ".join(_short(r) for r in by["adopt"][:12]))
+    if by["improve"]:
+        lines.append("🛠 IMPROVE (взять+доработать): " + ", ".join(_short(r) for r in by["improve"][:12]))
+    if by["defer"]:
+        lines.append(f"⏸ DEFER (позже/GPU/вне-v1): {len(by['defer'])} — " + ", ".join(r['repo'].split('/')[-1] for r in by["defer"][:10]))
+    if by["skip"]:
+        lines.append(f"⏭ SKIP (отклонено): {len(by['skip'])} — " + ", ".join(_short(r) for r in by["skip"][:10]))
+    lines += [
         "",
         f"💰 Бюджет: токены {b.get('tokens_used',0)}/{b.get('tokens_limit',0)} · "
         f"запросы {b.get('requests_used',0)}/{b.get('requests_limit',0)} · "
         f"builder {b.get('builder_runs',0)} · clones {b.get('adopt_clones',0)}"
         + (" · ⏸ ПАУЗА (бюджет)" if b.get("paused") else ""),
         f"📋 Аудит: {audit_n} записей · сбоев исполнения: {fails}",
-        f"✅ Все действия — через Governor, конституция неприкосновенна.",
+        "✅ Всё через Governor; конституция неприкосновенна. Структурные правки ядра — на твой CONFIRM.",
+        "",
+        "👉 На ревью: подтверди какие DEFER/SKIP внедрять — допишу интеграторы и прогоню через Eval.",
     ]
     return "\n".join(lines)
 
