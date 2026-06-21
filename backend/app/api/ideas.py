@@ -78,7 +78,7 @@ async def accept(idea_id: str):
         await db.execute(
             "INSERT INTO tasks(id,kind,status,payload,created_at,updated_at)"
             " VALUES(?,?,?,?,?,?)",
-            (tid, "idea", "queued", row["text"], now, now))
+            (tid, "idea", "pending", row["text"], now, now))
         await db.execute("UPDATE ideas SET status='accepted' WHERE id=?", (idea_id,))
         await db.commit()
     return {"task_id": tid, "status": "accepted"}

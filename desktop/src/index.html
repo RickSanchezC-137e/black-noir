@@ -9,10 +9,10 @@
 :root{--mono:"JetBrains Mono",Consolas,monospace}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
-#px{position:relative;height:100vh;display:flex;flex-direction:column;background:#02100a;color:#4dffa0;font-family:var(--mono);overflow:hidden}
-#px.gold{background:#0f0b02;color:#f5bd3a}
-.scan{position:absolute;inset:0;pointer-events:none;z-index:30;background:repeating-linear-gradient(rgba(0,0,0,0) 0 2px,rgba(0,0,0,.2) 2px 3px)}
-.vig{position:absolute;inset:0;pointer-events:none;z-index:30;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 60%,rgba(0,0,0,.5) 100%)}
+#px{position:relative;height:100vh;display:flex;flex-direction:column;background:#04150e;color:#62ffb2;font-family:var(--mono);overflow:hidden}
+#px.gold{background:#140f02;color:#ffd24a}
+.scan{position:absolute;inset:0;pointer-events:none;z-index:30;background:repeating-linear-gradient(rgba(0,0,0,0) 0 2px,rgba(0,0,0,.1) 2px 3px)}
+.vig{position:absolute;inset:0;pointer-events:none;z-index:30;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 66%,rgba(0,0,0,.3) 100%)}
 .gl{text-shadow:0 0 8px currentColor}
 .hidden{display:none}
 .winbar{display:flex;align-items:center;height:30px;padding:0 8px;border-bottom:1px solid currentColor;font-size:11px;letter-spacing:1px}
@@ -22,7 +22,7 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 .winbar .wbtns .cl{color:#ff7a6b;border-color:#ff7a6b}
 .hd{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid currentColor;font-size:11px;letter-spacing:1px}
 .tabs{display:flex;gap:10px;flex:1}
-.tab{background:transparent;border:0;color:currentColor;font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:2px;cursor:pointer;opacity:.5}
+.tab{background:transparent;border:0;color:currentColor;font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:2px;cursor:pointer;opacity:.72}
 .tab.on{opacity:1;text-shadow:0 0 8px currentColor}
 .tab.on::before{content:"\2310";margin-right:5px}.tab.on::after{content:"\00AC";margin-left:5px}
 .ico{background:transparent;border:1px solid currentColor;color:currentColor;font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:3px;cursor:pointer}
@@ -38,19 +38,19 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 .sub{position:absolute;top:42px;left:12px;z-index:6;display:flex;gap:4px}
 .sb{background:rgba(0,0,0,.5);border:1px solid currentColor;color:currentColor;font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:3px;cursor:pointer;opacity:.5}
 .sb.on{opacity:1}
-.hint{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:11px;opacity:.45;z-index:6;pointer-events:none}
+.hint{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:11px;opacity:.62;z-index:6;pointer-events:none}
 /* 2D schema — same core→cluster→module links as 3D, live, animated flow */
 .schema2d{position:absolute;inset:0;z-index:6;pointer-events:none}
 .schema2d.hidden{display:none}
 .s2bar{position:absolute;top:42px;left:auto;right:12px;z-index:7;display:flex;gap:6px;align-items:center;font-size:11px;pointer-events:auto;max-width:calc(100% - 230px)}
 .s2bar input{background:rgba(0,0,0,.5);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:4px 8px;border-radius:3px;width:150px}
 .s2chips{display:flex;gap:4px;flex-wrap:wrap}
-.s2chip{border:1px solid currentColor;border-radius:3px;padding:2px 6px;cursor:pointer;opacity:.4;white-space:nowrap}
+.s2chip{border:1px solid currentColor;border-radius:3px;padding:2px 6px;cursor:pointer;opacity:.6;white-space:nowrap}
 .s2chip.on{opacity:1}
 .s2act{margin-left:auto;opacity:.75;letter-spacing:1px}
 #s2svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #s2svg .nd{pointer-events:auto}
-#s2svg .lnk{stroke:currentColor;fill:none;stroke-width:1;opacity:.28}
+#s2svg .lnk{stroke:currentColor;fill:none;stroke-width:1.3;opacity:.5}
 #s2svg .lnk.flow{stroke-dasharray:3 7;animation:s2dash 1.1s linear infinite}
 #s2svg .lnk.dim{opacity:.08;animation:none}
 @keyframes s2dash{to{stroke-dashoffset:-20}}
@@ -72,25 +72,25 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 #s2svg .pkt{fill:currentColor;filter:drop-shadow(0 0 5px currentColor)}
 .cols{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:12px 14px;font-size:11px}
 .col h4{margin:0 0 8px;font-size:11px;letter-spacing:1px;opacity:.75}
-.mod{border:1px solid rgba(127,127,127,.4);border-radius:5px;padding:7px 9px;margin-bottom:7px;cursor:pointer}
+.mod{border:1px solid rgba(127,127,127,.62);border-radius:5px;padding:7px 9px;margin-bottom:7px;cursor:pointer}
 .mod b{font-weight:400}.mod .m{font-size:10px;opacity:.6;margin-top:3px}
 .dot{color:#4dffa0}.dot.err{color:#ff7a6b}.dot.idle{opacity:.6}.dot.busy{color:#ffd24d}
 .empty{opacity:.5;font-style:italic;padding:10px 14px;font-size:12px}
 /* kanban / cards */
 .kb{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:12px 14px;font-size:11px}
 .kbcol h4{margin:0 0 8px;opacity:.75;letter-spacing:1px}
-.tk{border:1px solid rgba(127,127,127,.4);border-radius:5px;padding:6px 8px;margin-bottom:6px}
-.idea{border:1px solid rgba(127,127,127,.4);border-radius:5px;padding:6px 9px;margin:0 14px 6px}
+.tk{border:1px solid rgba(127,127,127,.62);border-radius:5px;padding:6px 8px;margin-bottom:6px}
+.idea{border:1px solid rgba(127,127,127,.62);border-radius:5px;padding:6px 9px;margin:0 14px 6px}
 /* chat */
-#chatlog{position:absolute;top:38px;left:14px;right:14px;bottom:52px;overflow:auto;border:1px solid rgba(127,127,127,.35);border-radius:6px;padding:10px;font-size:12px}
+#chatlog{position:absolute;top:38px;left:14px;right:14px;bottom:52px;overflow:auto;border:1px solid rgba(127,127,127,.55);border-radius:6px;padding:10px;font-size:12px}
 .msg{margin:5px 0}.msg.me{color:currentColor;opacity:.85}.msg.ai{opacity:1}.msg.sys{opacity:.5}
 #chatin{position:absolute;left:14px;right:14px;bottom:12px;display:flex;gap:6px}
 #chatin input{flex:1;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:7px;border-radius:4px}
 /* systems */
 .syswrap{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px}
-.card{border:1px solid rgba(127,127,127,.35);border-radius:6px;padding:11px 13px}
+.card{border:1px solid rgba(127,127,127,.55);border-radius:6px;padding:11px 13px}
 .card h5{margin:0 0 8px;font-size:11px;letter-spacing:1px}
-.row{display:flex;justify-content:space-between;font-size:12px;margin:3px 0;opacity:.9;gap:8px}
+.row{display:flex;justify-content:space-between;font-size:12px;margin:3px 0;opacity:1;gap:8px}
 .bar{height:5px;background:rgba(127,127,127,.25);border-radius:3px;overflow:hidden;margin:4px 0 8px}.bar>i{display:block;height:100%;background:currentColor}
 .prof{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px}
 .chip{display:inline-block;border:1px solid currentColor;border-radius:3px;padding:0 5px;font-size:10px;opacity:.85}
@@ -101,24 +101,35 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 #insp .ih{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid currentColor;font-size:12px}
 #insp .ih .x{margin-left:auto;cursor:pointer;border:1px solid currentColor;border-radius:3px;padding:0 7px}
 #insp .itabs{display:flex;gap:4px;padding:7px 10px;flex-wrap:wrap}
-#insp .it{font-size:10px;border:1px solid currentColor;border-radius:3px;padding:3px 7px;cursor:pointer;opacity:.55}
+#insp .it{font-size:10px;border:1px solid currentColor;border-radius:3px;padding:3px 7px;cursor:pointer;opacity:.78}
 #insp .it.on{opacity:1}
 #insp .ibody{flex:1;overflow:auto;padding:10px 11px;font-size:11px}
 .notifs{position:absolute;right:12px;bottom:12px;width:240px;z-index:25;display:flex;flex-direction:column;gap:8px}
 .toast{border:1px solid currentColor;border-left:3px solid currentColor;background:rgba(0,0,0,.9);border-radius:4px;padding:8px 10px;font-size:11px}
 .bell{position:relative;cursor:pointer}.bell .cnt{position:absolute;top:-7px;right:-9px;font-size:9px;background:currentColor;color:#02100a;border-radius:8px;padding:0 4px}
 .vbro{position:absolute;left:13px;bottom:13px;z-index:20;display:flex;align-items:flex-end;gap:8px}
-.vbport{border:1px solid currentColor;background:rgba(0,0,0,.6);border-radius:4px;padding:4px 7px 2px}
+.vbport{position:relative;border:1px solid currentColor;background:rgba(0,0,0,.6);border-radius:4px;padding:4px 7px 2px;cursor:pointer}
 .vbport .nm{text-align:center;font-size:10px;opacity:.85}
-.vbub{border:1px solid currentColor;background:rgba(0,0,0,.8);border-radius:6px;padding:8px 10px;font-size:11px;max-width:230px}
-.ft{display:flex;justify-content:space-between;padding:5px 12px;border-top:1px solid currentColor;font-size:11px;opacity:.7}
+.vbx{position:absolute;top:-7px;right:-7px;width:16px;height:16px;line-height:14px;text-align:center;border:1px solid currentColor;border-radius:50%;background:#02100a;font-size:9px;cursor:pointer;z-index:2}
+#px.gold .vbx{background:#0f0b02}
+.vbside{display:flex;flex-direction:column;gap:6px}
+.vbub{border:1px solid currentColor;background:rgba(0,0,0,.8);border-radius:6px;padding:8px 10px;font-size:11px;max-width:250px}
+.vbchat{display:none;flex-direction:column;width:260px;height:210px;border:1px solid currentColor;background:rgba(0,4,2,.96);border-radius:6px}
+#px.gold .vbchat{background:rgba(15,11,2,.96)}
+.vbchat.on{display:flex}
+.vblog{flex:1;overflow:auto;padding:7px 9px;font-size:11px}
+.vbin{display:flex;gap:5px;padding:6px;border-top:1px solid currentColor}
+.vbin input{flex:1;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:5px;border-radius:4px}
+.vbshow{display:none;position:absolute;left:13px;bottom:13px;z-index:20;border:1px solid currentColor;background:rgba(0,0,0,.7);border-radius:4px;padding:5px 9px;font-size:10px;letter-spacing:1px;cursor:pointer}
+.vbshow.on{display:block}
+.ft{display:flex;justify-content:space-between;padding:5px 12px;border-top:1px solid currentColor;font-size:11px;opacity:.85}
 /* chat: channel switcher + voice bar + equalizer + attachments + visual face */
 .chsw{position:absolute;top:34px;left:14px;right:14px;height:26px;display:flex;gap:6px;z-index:3}
 .chtab{background:transparent;border:1px solid currentColor;color:currentColor;font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:3px 10px;border-radius:3px;cursor:pointer;opacity:.5}
 .chtab.on{opacity:1;text-shadow:0 0 6px currentColor}
 .cdraft{position:absolute;left:14px;right:120px;bottom:72px;display:none;flex-wrap:wrap;gap:5px;z-index:2}
 #chatlog{top:104px}
-.voicebar{position:absolute;top:64px;left:14px;right:14px;height:34px;display:flex;align-items:center;gap:8px;border:1px solid rgba(127,127,127,.35);border-radius:6px;padding:0 8px}
+.voicebar{position:absolute;top:64px;left:14px;right:14px;height:34px;display:flex;align-items:center;gap:8px;border:1px solid rgba(127,127,127,.55);border-radius:6px;padding:0 8px}
 .voicebar .mic{border:1px solid currentColor;background:transparent;color:currentColor;font-family:var(--mono);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px}
 .voicebar .mic.rec{background:#ff7a6b;color:#02100a;border-color:#ff7a6b}
 .voicebar canvas{flex:1;height:24px;display:block}
@@ -140,7 +151,7 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 .intake select{background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:6px;border-radius:4px}
 .ideacols{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:6px 14px 14px;font-size:11px}
 .ideacol h4{margin:0 0 8px;opacity:.75;letter-spacing:1px}
-.idea{border:1px solid rgba(127,127,127,.4);border-radius:5px;padding:7px 9px;margin-bottom:7px;cursor:pointer}
+.idea{border:1px solid rgba(127,127,127,.62);border-radius:5px;padding:7px 9px;margin-bottom:7px;cursor:pointer}
 .idea .m{font-size:10px;opacity:.6;margin-top:3px}
 .tk{cursor:pointer}
 .tlog{font-size:10px;opacity:.8;margin:2px 0;white-space:pre-wrap}
@@ -185,7 +196,7 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
       <div class="hint" id="maphint">клик по ядру — состав ИИ · по модулю — инспектор · подсветка = модуль активен · импульс по линии = обмен данными</div>
     </div>
 
-    <div class="pane hidden" data-tab="tasks"><div class="ttl gl">ЗАДАЧИ</div><div class="kb" id="tasks"></div></div>
+    <div class="pane hidden" data-tab="tasks"><div class="ttl gl">ЗАДАЧИ <button class="ico" id="addtask">+ ЗАДАЧА</button></div><div class="kb" id="tasks"></div></div>
 
     <div class="pane hidden" data-tab="chat"><div class="ttl gl">ЧАТ · МОДУЛЬ ВЗАИМОДЕЙСТВИЯ <button class="ico" id="visual">◉ ВИЗУАЛ</button></div>
       <div class="chsw"><button class="chtab on" data-ch="mediator">ПЕРЕДАТЧИК</button><button class="chtab" data-ch="core">ЯДРО</button><button class="chtab" data-ch="claude_code">CLAUDE CODE</button></div>
@@ -209,7 +220,7 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
         <select id="isrc"><option value="repo">GitHub-репо</option><option value="link">ссылка</option><option value="video">видео</option><option value="text">текст</option></select>
         <input id="ival" placeholder="вставьте репозиторий / ссылку / описание…" autocomplete="off"/>
         <button class="ico" id="iadd">ПРИНЯТЬ В РАЗБОР</button>
-        <button class="ico" id="ifile">ФАЙЛ</button>
+        <button class="ico" id="ifile">ФАЙЛ</button><button class="ico" id="ideachat">ЧАТ С АГЕНТОМ</button>
         <span class="vlbl" id="botstat" style="opacity:.6">TG-бот: …</span>
       </div>
       <div class="ideacols" id="ideacols"></div>
@@ -229,8 +240,8 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
     <div id="facewin"><div class="fh" id="facehead"><span class="gl">ЛИЦО ЯДРА</span><span class="x" id="faceclose">✕</span></div><canvas id="facecv"></canvas></div>
 
     <div class="notifs" id="notifs"></div>
-    <div class="vbro">
-      <div class="vbport"><svg viewBox="0 0 200 230" width="64" height="74" style="display:block;filter:drop-shadow(0 0 4px currentColor)"><g id="vbFig" fill="none" stroke="#03110a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <div class="vbro" id="vbro">
+      <div class="vbport" id="vbport" title="помощник по системе — нажми, чтобы спросить"><span class="vbx" id="vbhide" title="скрыть">✕</span><svg viewBox="0 0 200 230" width="64" height="74" style="display:block;filter:drop-shadow(0 0 4px currentColor)"><g id="vbFig" fill="none" stroke="#03110a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
         <g fill="currentColor" stroke="none"><path d="M84 176 L80 214 L96 214 L98 178 Z"/><path d="M116 176 L120 214 L104 214 L102 178 Z"/></g>
         <path d="M78 211 L98 211"/><path d="M102 211 L122 211"/><path d="M100 178 L100 201"/>
         <path fill="currentColor" stroke="none" d="M64 116 C72 108 128 108 136 116 L146 180 L54 180 Z"/>
@@ -239,7 +250,7 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
         <g id="vbArm"><path fill="currentColor" stroke="none" d="M128 116 C144 110 164 92 168 64 L186 66 C182 98 158 122 136 126 Z"/><circle cx="176" cy="56" r="17" fill="currentColor" stroke="none"/><path fill="currentColor" stroke="currentColor" stroke-width="1.5" d="M180 22 C180 12 196 12 196 24 L196 46 C190 50 182 48 180 42 Z"/></g>
         <g id="vbHead"><path fill="currentColor" stroke="none" d="M56 44 C50 18 84 6 104 16 C92 20 84 30 84 44 C74 30 64 32 56 44 Z"/><ellipse cx="100" cy="70" rx="50" ry="48"/><ellipse cx="147" cy="80" rx="9" ry="12"/><circle cx="84" cy="66" r="3.6" fill="currentColor" stroke="none"/><circle cx="114" cy="64" r="3.6" fill="currentColor" stroke="none"/><path d="M74 90 Q100 116 128 88"/></g>
       </g></svg><div class="nm">VOLT-BRO</div></div>
-      <div class="vbub" id="vbub">Подключаюсь к ядру…</div>
+      <div class="vbside"><div class="vbub" id="vbub">Подключаюсь к ядру…</div><div class="vbchat" id="vbchat"><div class="vblog" id="vblog"></div><div class="vbin"><input id="vbi" placeholder="как устроена система?" autocomplete="off"/><button class="ico" id="vbsend">→</button></div></div></div>
     </div>
   </div>
 

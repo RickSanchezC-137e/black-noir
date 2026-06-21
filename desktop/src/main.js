@@ -91,12 +91,33 @@ $("#bell").onclick = () => { unread = 0; $("#bellcnt").classList.add("hidden"); 
 // ---------- clock + companion ----------
 function clock() { const t = new Date(), p = (x) => x < 10 ? "0" + x : x; $("#clock").textContent = p(t.getHours()) + ":" + p(t.getMinutes()) + " · live"; }
 clock(); setInterval(clock, 30000);
+let vbTalk = 0;
 (function anim() {
   requestAnimationFrame(anim);
   const t = Date.now() / 1000, fig = $("#vbFig"), arm = $("#vbArm"), head = $("#vbHead");
-  if (fig) fig.setAttribute("transform", `translate(0 ${(Math.sin(t * 2.2) * 2.4).toFixed(2)})`);
-  if (arm) arm.setAttribute("transform", `rotate(${(Math.sin(t * 6) * 7).toFixed(2)} 130 120)`);
-  if (head) head.setAttribute("transform", `rotate(${(Math.sin(t * 1.4) * 1.6).toFixed(2)} 100 118)`);
+  vbTalk *= 0.96;
+  const wave = Math.pow(Math.max(0, Math.sin(t * 0.5)), 6);            // periodic Fallout-style wave
+  const bob = Math.sin(t * 2.2) * 2.4 * (1 + vbTalk);
+  const armA = Math.sin(t * 6) * 7 + wave * Math.sin(t * 14) * 22 + vbTalk * Math.sin(t * 18) * 10;
+  const headA = Math.sin(t * 1.4) * 1.6 * (1 + vbTalk * 4);
+  if (fig) fig.setAttribute("transform", `translate(0 ${bob.toFixed(2)})`);
+  if (arm) arm.setAttribute("transform", `rotate(${armA.toFixed(2)} 130 120)`);
+  if (head) head.setAttribute("transform", `rotate(${headA.toFixed(2)} 100 118)`);
+})();
+
+// ---------- companion: system-guide chat + hide/show ----------
+(function companion() {
+  const screen = $("#screen");
+  const show = el("div", "vbshow", "\u25B8 VOLT-BRO"); show.id = "vbshow"; show.title = "показать помощника"; screen.appendChild(show);
+  const port = $("#vbport"), chat = $("#vbchat"), ro = $("#vbro");
+  const vbAppend = (cls, t) => { const e = el("div", "msg " + cls, esc(t)); $("#vblog").appendChild(e); $("#vblog").scrollTop = 1e9; return e; };
+  if (port) port.onclick = (e) => { if (e.target.closest(".vbx")) return; chat.classList.toggle("on"); if (chat.classList.contains("on")) { $("#vbi").focus(); if (!$("#vblog").children.length) vbAppend("sys", "Спроси про систему: кластеры, модули, Governor, самоулучшение…"); } };
+  async function vbSend() { const i = $("#vbi"), t = i.value.trim(); if (!t) return; i.value = ""; vbAppend("me", "» " + t); const b = vbAppend("ai", "…"); try { const r = await api("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: t, agent: "guide", session_id: "guide-companion" }) }); b.textContent = pickReply(r); vbTalk = 1; } catch (e) { b.textContent = "[нет связи]"; b.className = "msg sys"; } }
+  if ($("#vbsend")) $("#vbsend").onclick = vbSend;
+  if ($("#vbi")) $("#vbi").addEventListener("keydown", (e) => { if (e.key === "Enter") vbSend(); });
+  if ($("#vbhide")) $("#vbhide").onclick = (e) => { e.stopPropagation(); ro.style.display = "none"; show.classList.add("on"); localStorage.setItem("noir.vbhidden", "1"); };
+  show.onclick = () => { ro.style.display = ""; show.classList.remove("on"); localStorage.removeItem("noir.vbhidden"); };
+  if (localStorage.getItem("noir.vbhidden")) { ro.style.display = "none"; show.classList.add("on"); }
 })();
 
 // ====================================================================
@@ -248,7 +269,7 @@ async function pumpActivity() {
 // ====================================================================
 //  TASKS — kanban + inspector ИНФО/ЛОГ/ВЕТВЬ/ЧАТ (live)
 // ====================================================================
-const TCOLS = { queued: "В ОЧЕРЕДИ", running: "В ПРОЦЕССЕ", done: "ГОТОВО", error: "ОШИБКА" };
+const TCOLS = { pending: "В ОЧЕРЕДИ", running: "В ПРОЦЕССЕ", done: "ГОТОВО", error: "ОШИБКА" };
 async function loadTasks() {
   try {
     const d = await api("/api/tasks"); const t = d.tasks || [];
@@ -264,7 +285,7 @@ async function loadTasks() {
       wrap.appendChild(col);
     });
     // active-task badge on the nav tab
-    const act = t.filter((x) => x.status === "running" || x.status === "queued").length;
+    const act = t.filter((x) => x.status === "running" || x.status === "pending").length;
     const tab = document.querySelector(".tab[data-go=tasks]");
     if (tab) tab.textContent = act ? `ЗАДАЧИ (${act})` : "ЗАДАЧИ";
   } catch (e) { $("#tasks").innerHTML = "<div class='empty'>нет связи с ядром</div>"; }
@@ -358,6 +379,8 @@ $("#iadd").onclick = () => { intake($("#isrc").value, $("#ival").value); $("#iva
 $("#ival").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#iadd").click(); });
 $("#ifile").onclick = () => $("#ideafileinp").click();
 $("#ideafileinp").onchange = (e) => { for (const f of e.target.files) intake("file", f.name); e.target.value = ""; };
+$("#addtask").onclick = async () => { try { await api("/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "ручная", payload: "создана из десктопа" }) }); toast("Задача создана"); document.querySelector(".tab[data-go=tasks]").click(); await loadTasks(); } catch (e) { toast("Не удалось создать"); } };
+$("#ideachat").onclick = () => { drawer("АГЕНТ МОДУЛЯ ИДЕЙ"); inspTabs.innerHTML = ""; agentChat(inspBody, "module:ideas", "спросить агента идей…"); };
 async function loadBotStatus() { try { const d = await api("/api/ideas/bot"); const tg = d.telegram; $("#botstat").textContent = tg && tg.username ? "TG-бот: @" + tg.username : "TG-бот: не настроен"; } catch (e) { $("#botstat").textContent = "TG-бот: —"; } }
 
 // ====================================================================
@@ -491,29 +514,43 @@ function drawEq() {
 $("#mic").onclick = toggleMic;
 
 // ---- visual face: core made of particles (Three.js Points) ----
-let faceScene, faceRen, faceCam, facePts, faceMat, faceBase, faceRAF, faceSpeakLvl = 0;
+let faceScene, faceRen, faceCam, facePts, faceMat, faceBase, faceType, faceRAF, faceSpeakLvl = 0;
 function faceSpeak(l) { faceSpeakLvl = Math.max(faceSpeakLvl, Math.min(1, l * 1.6)); }
 function buildFace() {
   const c = $("#facecv"); c.width = c.clientWidth || 260; c.height = 220;
-  faceScene = new THREE.Scene(); faceCam = new THREE.PerspectiveCamera(50, c.width / c.height, .1, 100); faceCam.position.z = 3.2;
+  faceScene = new THREE.Scene(); faceCam = new THREE.PerspectiveCamera(50, c.width / c.height, .1, 100); faceCam.position.z = 2.6;
   faceRen = new THREE.WebGLRenderer({ canvas: c, antialias: true, alpha: true }); faceRen.setSize(c.width, c.height); faceRen.setClearColor(0, 0);
-  const N = 1400, pos = new Float32Array(N * 3); faceBase = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) { const a = i * 2.39996, b = Math.acos(1 - 2 * (i + .5) / N), rr = 1; const x = rr * Math.sin(b) * Math.cos(a), y = rr * Math.cos(b), z = rr * Math.sin(b) * Math.sin(a); pos[i * 3] = faceBase[i * 3] = x; pos[i * 3 + 1] = faceBase[i * 3 + 1] = y; pos[i * 3 + 2] = faceBase[i * 3 + 2] = z; }
+  // front-facing particle FACE: head fill + two eyes (blink) + a mouth that opens on speech
+  const P = [], HEAD = 900;
+  for (let i = 0; i < HEAD; i++) { const a = i * 2.39996, r = Math.sqrt((i + .5) / HEAD), x = Math.cos(a) * r * 0.92, y = Math.sin(a) * r * 1.12, z = 0.3 * (1 - (x * x + y * y)); P.push(x, y, z, 0); }
+  const EYE = 120;
+  [[-0.36, 0.30], [0.36, 0.30]].forEach(([ex, ey]) => { for (let i = 0; i < EYE; i++) { const a = i * 2.39996, r = Math.sqrt((i + .5) / EYE) * 0.12; P.push(ex + Math.cos(a) * r, ey + Math.sin(a) * r, 0.42, 1); } });
+  const MOUTH = 180;
+  for (let i = 0; i < MOUTH; i++) { const u = i / (MOUTH - 1); P.push((u - 0.5) * 0.66, -0.45, 0.44, 2); }
+  const N = P.length / 4, pos = new Float32Array(N * 3); faceBase = new Float32Array(N * 3); faceType = new Int8Array(N);
+  for (let i = 0; i < N; i++) { pos[i*3]=faceBase[i*3]=P[i*4]; pos[i*3+1]=faceBase[i*3+1]=P[i*4+1]; pos[i*3+2]=faceBase[i*3+2]=P[i*4+2]; faceType[i]=P[i*4+3]; }
   const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  faceMat = new THREE.PointsMaterial({ color: new THREE.Color(theme === "green" ? 0x4dffa0 : 0xf5bd3a), size: 0.035, transparent: true, opacity: .9, blending: THREE.AdditiveBlending, depthWrite: false });
+  faceMat = new THREE.PointsMaterial({ color: new THREE.Color(theme === "green" ? 0x62ffb2 : 0xffd24a), size: 0.04, transparent: true, opacity: .92, blending: THREE.AdditiveBlending, depthWrite: false });
   facePts = new THREE.Points(geo, faceMat); faceScene.add(facePts);
   window.__facephos = (hex) => faceMat.color.set(hex);
   (function loop() {
     faceRAF = requestAnimationFrame(loop);
     if (!$("#facewin").classList.contains("on")) return;
-    const t = Date.now() / 1000; const breathe = 1 + Math.sin(t * 1.5) * 0.03; const speak = faceSpeakLvl;
+    const t = Date.now() / 1000, breathe = 1 + Math.sin(t * 1.6) * 0.02, speak = faceSpeakLvl, blink = (Math.sin(t * 0.9) > 0.985) ? 1 : 0;
     const p = facePts.geometry.attributes.position.array;
-    for (let i = 0; i < faceBase.length; i += 3) { const k = breathe + speak * 0.5 * (0.5 + 0.5 * Math.sin(faceBase[i + 1] * 6 + t * 8)); p[i] = faceBase[i] * k; p[i + 1] = faceBase[i + 1] * k; p[i + 2] = faceBase[i + 2] * k; }
+    for (let i = 0; i < N; i++) {
+      const ti = faceType[i], bx = faceBase[i*3], by = faceBase[i*3+1], bz = faceBase[i*3+2];
+      let x = bx * breathe, y = by * breathe;
+      if (ti === 1 && blink) y = 0.30 + (by - 0.30) * 0.12;                                  // eyes blink
+      if (ti === 2) y = by - (0.04 + speak * 0.22) * Math.cos(bx * 4.7) - speak * 0.03 * Math.sin(t * 22);  // mouth opens
+      p[i*3] = x; p[i*3+1] = y; p[i*3+2] = bz;
+    }
     facePts.geometry.attributes.position.needsUpdate = true;
-    facePts.rotation.y += 0.003; faceSpeakLvl *= 0.92;
+    facePts.rotation.y = Math.sin(t * 0.6) * 0.22; faceSpeakLvl *= 0.92;                       // gentle look-around
     faceRen.render(faceScene, faceCam);
   })();
 }
+
 $("#visual").onclick = () => { const w = $("#facewin"); w.classList.toggle("on"); if (w.classList.contains("on") && !faceScene) buildFace(); };
 $("#faceclose").onclick = () => $("#facewin").classList.remove("on");
 (function faceDrag() {

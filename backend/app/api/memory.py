@@ -33,7 +33,9 @@ async def memory_slice(module: str = Query(None)):
                       "confidence": r["confidence"], "source": r["source"], "ts": r["observed_at"]}
                      for r in await cur.fetchall()]
             cur = await db.execute(
-                "SELECT id,statement,status,verdict FROM m_owner_profile__profile_hypothesis")
+                "SELECT MIN(id) id, statement, status, verdict"
+                " FROM m_owner_profile__profile_hypothesis GROUP BY statement"
+                " ORDER BY MIN(id)")
             hyps = [{"id": r["id"], "statement": r["statement"], "status": r["status"],
                      "verdict": r["verdict"]} for r in await cur.fetchall()]
             cur = await db.execute(

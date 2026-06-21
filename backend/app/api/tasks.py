@@ -5,10 +5,16 @@ from datetime import datetime, timezone
 
 import aiosqlite
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from app.config import settings
 
 router = APIRouter(prefix="/api/tasks")
+
+
+class CreateIn(BaseModel):
+    kind: str = "manual"
+    payload: str = ""
 
 
 @router.get("")
@@ -19,6 +25,20 @@ async def list_tasks(limit: int = 50):
             "SELECT id,kind,status,created_at,updated_at FROM tasks"
             " ORDER BY created_at DESC LIMIT ?", (limit,))
         return {"tasks": [dict(r) for r in await cur.fetchall()]}
+
+
+@router.post("")
+async def create_task(body: CreateIn):
+    """Create a queued task (manual / from UI). Real row in the tasks table."""
+    import uuid
+    tid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        await db.execute(
+            "INSERT INTO tasks(id,kind,status,payload,created_at,updated_at)"
+            " VALUES(?,?,?,?,?,?)", (tid, body.kind, "pending", body.payload, now, now))
+        await db.commit()
+    return {"id": tid, "kind": body.kind, "status": "queued"}
 
 
 @router.get("/{task_id}")
@@ -59,4 +79,4 @@ async def cancel(task_id: str):
 
 @router.post("/{task_id}/retry")
 async def retry(task_id: str):
-    return await _set_status(task_id, "queued")
+    return await _set_status(task_id, "pending")
