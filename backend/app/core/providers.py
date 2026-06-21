@@ -52,13 +52,29 @@ async def ask_gemini(system: str, message: str, history: list[dict] | None = Non
         return "".join(p.get("text", "") for p in cand).strip()
 
 
+async def ask_openai(system: str, message: str, history: list[dict] | None = None) -> str:
+    if not settings.openai_api_key:
+        raise RuntimeError("no openai key")
+    msgs = [{"role": "system", "content": system}]
+    msgs += [{"role": m["role"], "content": m["content"]} for m in (history or [])]
+    msgs.append({"role": "user", "content": message})
+    async with httpx.AsyncClient(timeout=settings.council_timeout_s) as c:
+        r = await c.post("https://api.openai.com/v1/chat/completions",
+                         headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                         json={"model": settings.openai_model, "messages": msgs,
+                               "max_tokens": settings.llm_max_tokens})
+        r.raise_for_status()
+        return (r.json()["choices"][0]["message"]["content"] or "").strip()
+
+
 def roster() -> list[dict]:
     """Council members + whether each is enabled (has a key)."""
     return [
         {"id": "opus", "name": "Claude Opus", "model": settings.claude_model, "enabled": bool(settings.anthropic_api_key)},
         {"id": "deepseek", "name": "DeepSeek", "model": settings.deepseek_model, "enabled": bool(settings.deepseek_api_key)},
         {"id": "gemini", "name": "Gemini", "model": settings.gemini_model, "enabled": bool(settings.gemini_api_key)},
+        {"id": "openai", "name": "OpenAI GPT", "model": settings.openai_model, "enabled": bool(settings.openai_api_key)},
     ]
 
 
-FNS = {"opus": ask_opus, "deepseek": ask_deepseek, "gemini": ask_gemini}
+FNS = {"opus": ask_opus, "deepseek": ask_deepseek, "gemini": ask_gemini, "openai": ask_openai}

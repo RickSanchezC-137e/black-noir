@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-chat"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
     council_timeout_s: float = 30.0
 
     # Search / integrations
