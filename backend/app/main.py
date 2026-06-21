@@ -39,8 +39,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 # routers (imported after app to avoid cycles)
 from app.api import (chat, core, governor, ideas, memory,  # noqa: E402
-                     modules, selfimprove, tasks, ws)
+                     modules, selfimprove, tasks, visual, ws)
 
 for r in (core.router, chat.router, memory.router, governor.router, modules.router,
-          ideas.router, tasks.router, selfimprove.router, ws.router):
+          ideas.router, tasks.router, selfimprove.router, visual.router, ws.router):
     app.include_router(r)

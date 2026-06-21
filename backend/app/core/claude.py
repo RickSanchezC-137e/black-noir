@@ -21,14 +21,17 @@ SYSTEM = (
 )
 
 
-async def chat(message: str, history: list[dict] | None = None) -> tuple[str, int, int]:
-    """Returns (reply, tokens_in, tokens_out)."""
+async def chat(message: str, history: list[dict] | None = None, extra_system: str = "") -> tuple[str, int, int]:
+    """Returns (reply, tokens_in, tokens_out). extra_system = memory context (summary/recall)."""
     msgs = list(history or [])
     msgs.append({"role": "user", "content": message})
+    system = SYSTEM.format(name=settings.project_name)
+    if extra_system:
+        system += "\n\n" + extra_system
     resp = await client().messages.create(
         model=settings.claude_model,
         max_tokens=settings.llm_max_tokens,
-        system=SYSTEM.format(name=settings.project_name),
+        system=system,
         messages=msgs,
     )
     text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")

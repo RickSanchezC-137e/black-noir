@@ -83,6 +83,68 @@ async def _save(sid: str, role: str, content: str, ti: int = 0, to: int = 0) -> 
         await db.commit()
 
 
+async def _get_summary(sid: str) -> str:
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        try:
+            cur = await db.execute("SELECT summary FROM sessions WHERE id=?", (sid,))
+            row = await cur.fetchone()
+            return (row[0] if row and row[0] else "")
+        except aiosqlite.OperationalError:
+            await db.execute("ALTER TABLE sessions ADD COLUMN summary TEXT")
+            await db.commit()
+            return ""
+
+
+async def _set_summary(sid: str, text: str) -> None:
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        try:
+            await db.execute("UPDATE sessions SET summary=? WHERE id=?", (text, sid))
+        except aiosqlite.OperationalError:
+            await db.execute("ALTER TABLE sessions ADD COLUMN summary TEXT")
+            await db.execute("UPDATE sessions SET summary=? WHERE id=?", (text, sid))
+        await db.commit()
+
+
+async def _msg_count(sid: str) -> int:
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        cur = await db.execute("SELECT COUNT(*) FROM messages WHERE session_id=?", (sid,))
+        return (await cur.fetchone())[0]
+
+
+async def _mem_context(sid: str, message: str) -> str:
+    """Memory context for the model: rolling session summary + semantic recall (ChromaDB)."""
+    parts = []
+    summ = await _get_summary(sid)
+    if summ:
+        parts.append("Резюме прошлого этого диалога:\n" + summ)
+    try:
+        hits = await memory.recall(message, k=3)
+        rel = "\n".join("- " + (h.get("content") or "") for h in hits if h.get("content"))
+        if rel:
+            parts.append("Возможно релевантное из долгой памяти:\n" + rel)
+    except Exception:  # noqa: BLE001
+        pass
+    return "\n\n".join(parts)
+
+
+async def _maybe_summarize(sid: str) -> None:
+    """Every ~10 messages, fold the recent thread into a rolling summary (long-term memory)."""
+    n = await _msg_count(sid)
+    if n < 8 or n % 10 != 0:
+        return
+    hist = await _history(sid, 24)
+    old = await _get_summary(sid)
+    convo = "\n".join(f"{m['role']}: {m['content']}" for m in hist)
+    prompt = (f"Старое резюме:\n{old or '(нет)'}\n\nНовые сообщения:\n{convo}\n\n"
+              "Обнови КРАТКОЕ резюме диалога (что обсудили, решения, на чём остановились) — "
+              "5–8 пунктов, по-русски.")
+    try:
+        summ, _, _ = await claude.chat_as("Ты ведёшь краткое резюме диалога для памяти ассистента.", prompt)
+        await _set_summary(sid, summ.strip())
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _module_agent_system(mid: str) -> str:
     """Scoped persona for a module's own agent — answers AS the module, not the core."""
     try:
@@ -124,12 +186,13 @@ async def chat(body: ChatIn):
     sid = body.session_id or (f"agent:{target}" if tgt_sys else str(uuid.uuid4()))
     await _ensure_session(sid)
     hist = await _history(sid)
+    mem = await _mem_context(sid, body.message)    # rolling summary + semantic recall
     await _save(sid, "user", body.message)
     await memory.remember(body.message, source=f"chat:{target or agent}", role="user")
 
     out = ChatOut(reply="", session_id=sid, agent=("module" if tgt_sys else agent))
     if tgt_sys:
-        out.reply, _, _ = await claude.chat_as(tgt_sys, body.message, hist)
+        out.reply, _, _ = await claude.chat_as(tgt_sys + (("\n\n" + mem) if mem else ""), body.message, hist)
     elif agent == "mediator":
         r = await mediator.relay(body.message, hist)
         out.reply, out.task, out.core_reply = r["reply"], r["task"], r["core_reply"]
@@ -137,9 +200,16 @@ async def chat(body: ChatIn):
         r = await claude_code.ask(body.message, resume=body.cc_session)
         out.reply, out.cc_session = r["reply"], r["session"]
     elif agent == "guide":
-        out.reply, _, _ = await claude.chat_as(_GUIDE_SYS, body.message, hist)
+        out.reply, _, _ = await claude.chat_as(_GUIDE_SYS + (("\n\n" + mem) if mem else ""), body.message, hist)
     else:
-        out.reply, _, _ = await claude.chat(body.message, hist)
+        out.reply, _, _ = await claude.chat(body.message, hist, extra_system=mem)
 
     await _save(sid, "assistant", out.reply)
+    await _maybe_summarize(sid)
     return out
+
+
+@router.get("/chat/summary")
+async def chat_summary(session_id: str):
+    """Where we left off — rolling summary of a chat session (shown on return)."""
+    return {"session_id": session_id, "summary": await _get_summary(session_id)}

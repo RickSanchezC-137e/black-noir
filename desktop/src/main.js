@@ -324,6 +324,7 @@ async function loadSystems() {
   try {
     const m = await api("/api/systems/metrics");
     $("#metrics").innerHTML = `<h5>МЕТРИКИ ХОСТА (live)</h5><div class="row"><span>CPU</span><span>${m.cpu}%</span></div><div class="bar"><i style="width:${Math.min(100, m.cpu)}%"></i></div><div class="row"><span>RAM</span><span>${m.ram}% (${m.ram_used_mb}/${m.ram_total_mb} МБ)</span></div><div class="bar"><i style="width:${m.ram}%"></i></div><div class="row"><span>Uptime</span><span>${esc(m.uptime)}</span></div><div class="row"><span>Ядра / GPU</span><span>${m.cores} / ${m.gpu ? "да" : "нет"}</span></div>`;
+    pushMetric(Number(m.cpu) || 0, Number(m.ram) || 0);
     const s = await api("/api/systems"); const h = s.hardware || {};
     $("#hw").innerHTML = `<h5>ЛОКАЛЬНЫЙ СЛОЙ</h5><div class="row"><span>Профиль</span><span>${esc(h.local_layer || h.profile || "—")}</span></div><div class="row"><span>Reflex</span><span>${esc(h.reflex || "cloud")}</span></div><div class="row"><span>Embeddings</span><span>${esc(s.embedding?.model || "—")} (${esc(s.embedding?.dim || "")})</span></div><div class="row"><span>Модулей</span><span>${modules.length}</span></div>`;
   } catch (e) { $("#metrics").innerHTML = "<div class='empty'>нет связи с ядром</div>"; }
@@ -551,12 +552,51 @@ function buildFace() {
   })();
 }
 
+// ---------- ВИЗУАЛ: режимы Лицо / Графики(live) / Кадр ----------
+let vMode = "face", cpuHist = [], ramHist = [];
+function setVMode(m) {
+  vMode = m;
+  document.querySelectorAll("#facewin .vmode").forEach((b) => b.classList.toggle("on", b.dataset.vm === m));
+  $("#facecv").style.display = m === "face" ? "block" : "none";
+  $("#vchart").style.display = m === "chart" ? "block" : "none";
+  $("#vimg").style.display = m === "img" ? "flex" : "none";
+  if (m === "chart") drawChart();
+  if (m === "img") loadVisual();
+}
+document.querySelectorAll("#facewin .vmode").forEach((b) => b.onclick = (e) => { e.stopPropagation(); setVMode(b.dataset.vm); });
+function pushMetric(cpu, ram) {
+  cpuHist.push(cpu); ramHist.push(ram);
+  if (cpuHist.length > 60) { cpuHist.shift(); ramHist.shift(); }
+  if (vMode === "chart" && $("#facewin").classList.contains("on")) drawChart();
+}
+function drawChart() {
+  const c = $("#vchart"); if (!c) return; c.width = c.clientWidth || 260; c.height = 220;
+  const g = c.getContext("2d"), col = getComputedStyle($("#px")).color;
+  g.clearRect(0, 0, c.width, c.height);
+  g.strokeStyle = col; g.globalAlpha = .15;
+  for (let i = 0; i <= 4; i++) { const y = 10 + i * (c.height - 20) / 4; g.beginPath(); g.moveTo(0, y); g.lineTo(c.width, y); g.stroke(); }
+  g.globalAlpha = 1;
+  const line = (arr, alpha) => { if (arr.length < 2) return; g.strokeStyle = col; g.globalAlpha = alpha; g.lineWidth = 1.6; g.beginPath(); arr.forEach((v, i) => { const x = i / (arr.length - 1) * c.width, y = c.height - (v / 100) * (c.height - 20) - 10; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); g.globalAlpha = 1; };
+  line(ramHist, .45); line(cpuHist, 1);
+  g.fillStyle = col; g.font = "10px monospace";
+  g.fillText(`CPU ${cpuHist.length ? cpuHist[cpuHist.length - 1] : 0}%  ·  RAM ${ramHist.length ? ramHist[ramHist.length - 1] : 0}%  (live)`, 6, 14);
+}
+async function loadVisual() {
+  const box = $("#vimg"); if (!box) return;
+  try {
+    const v = await api("/api/visual");
+    if (v.kind === "image" && v.payload) box.innerHTML = `<img src="${esc(v.payload)}"/>`;
+    else if (v.kind === "text" && v.payload) box.innerHTML = `<div>${esc(v.payload)}</div>`;
+    else if (v.kind === "chart" && v.payload) box.innerHTML = `<div style="opacity:.7">данные графика получены — переключись на ГРАФИКИ</div>`;
+    else box.innerHTML = `<div style="opacity:.5">нет кадра — сюда ядро выводит графики/изображения в реальном времени</div>`;
+  } catch (e) {}
+}
 $("#visual").onclick = () => { const w = $("#facewin"); w.classList.toggle("on"); if (w.classList.contains("on") && !faceScene) buildFace(); };
 $("#faceclose").onclick = () => $("#facewin").classList.remove("on");
 (function faceDrag() {
   const w = $("#facewin"), h = $("#facehead"); let sx, sy, sl, st, drag = false;
   h.addEventListener("pointerdown", (e) => {
-    if (e.target.closest(".x")) return;            // don't start a drag on the close button
+    if (e.target.closest(".x") || e.target.closest(".vmode")) return;   // not on controls
     drag = true; sx = e.clientX; sy = e.clientY; sl = w.offsetLeft; st = w.offsetTop;  // offsetParent-relative
     w.style.right = "auto"; w.style.left = sl + "px"; w.style.top = st + "px";
     h.setPointerCapture(e.pointerId);
@@ -603,6 +643,7 @@ function wsNotify() {
 async function refresh() {
   await loadCore();
   await Promise.all([loadModules(), loadSystems(), loadTasks(), loadIdeas(), loadProfile(), diffNotify(), pumpActivity()]);
+  if (vMode === "img" && $("#facewin").classList.contains("on")) loadVisual();
 }
 
 // ---------- boot ----------
