@@ -1,6 +1,7 @@
 """/api/core and /api/systems (CANON §3). Feeds the desktop HUD with live data only."""
 from __future__ import annotations
 
+import sys
 import time
 
 from fastapi import APIRouter
@@ -57,6 +58,12 @@ async def systems():
 @router.get("/systems/health")
 async def health():
     return {"status": "kill" if governor.killed else "ok", "version": "v1-dev"}
+
+
+@router.get("/systems/version")
+async def version():
+    return {"project": settings.project_name, "version": "v1-dev",
+            "python": sys.version.split()[0]}
 
 
 @router.get("/systems/metrics")

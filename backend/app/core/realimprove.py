@@ -116,7 +116,10 @@ def _restart_core() -> bool:
     return False
 
 
-async def build_real(intent: str, *, domain: str = "core") -> dict:
+async def build_real(intent: str, *, domain: str = "core", apply_to_live: bool = False) -> dict:
+    """Builder -> challenger eval -> gate. apply_to_live=False (default) is a DRY RUN: it
+    proves the change passes the gate WITHOUT touching the live production core. Live promotion
+    requires apply_to_live=True (explicit owner authorization)."""
     ok, why = budget.can_spend()
     if not ok:
         return {"decision": "paused", "reason": why}
@@ -158,10 +161,19 @@ async def build_real(intent: str, *, domain: str = "core") -> dict:
         no_regress = chall["per"].get("core", (0, 0))[0] >= champ["per"].get("core", (0, 0))[0] and \
             chall["per"].get("governor", (0, 0))[0] >= champ["per"].get("governor", (0, 0))[0]
         better = (ci > pi) and no_regress and chall["ok"]
+        rep["measurably_better"] = bool(better)
+        rep["improve_champion_vs_challenger"] = f"{pi} -> {ci}"
         if not (better and gov.decision in ("ALLOW", "CONFIRM")):
             rep["decision"] = "reject"
             rep["reason"] = f"not better (improve {pi}->{ci}, no_regress={no_regress}, gov={gov.decision})"
             await audit(action, gov, ok=False); return rep
+
+        # DRY RUN: gate passed, but do NOT touch the live production core (owner authorizes live).
+        if not apply_to_live:
+            rep["decision"] = "would_promote"
+            rep["reason"] = "gate PASSED in sandbox; live promotion withheld (dry-run, owner CONFIRM)"
+            rep["diff"] = b["diff"][:4000]
+            await audit(action, gov, ok=True); return rep
 
         # PROMOTE: apply diff to live, snapshot reverse patch, restart, verify live eval green
         reverse = subprocess.run(["git", "diff", "-R"], cwd=str(wt), capture_output=True, text=True).stdout
