@@ -473,6 +473,7 @@ async function sendChat() {
     if (ch === "mediator" && r.task) { appendMsg("sys", "→ ядру: " + r.task); pushHist(ch, "sys", "→ ядру: " + r.task); }
     if (ch === "council" && r.members) { const ln = "совет: " + r.members.map((m) => m.provider + (m.ok ? " ✓" : " ✗")).join(" · "); appendMsg("sys", ln); pushHist(ch, "sys", ln); }
     bubble.textContent = pickReply(r) || "(пустой ответ)"; pushHist(ch, "ai", bubble.textContent); faceSpeak(0.7);
+    if (ch === "core" && r.actions && r.actions.length) { const ln = "выполнено: " + r.actions.map((a) => a.tool).join(", "); appendMsg("sys", ln); pushHist(ch, "sys", ln); loadTasks(); loadIdeas(); }
   } catch (e) { bubble.textContent = "[нет связи с ядром]"; bubble.className = "msg sys"; }
   $("#chatlog").scrollTop = 1e9;
 }

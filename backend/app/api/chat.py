@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.core import claude, claude_code, council, mediator, memory
+from app.core import agent as orchestrator
 
 router = APIRouter(prefix="/api")
 
@@ -51,6 +52,7 @@ class ChatOut(BaseModel):
     core_reply: str | None = None  # mediator: the full (detailed) core answer
     cc_session: str | None = None  # claude_code: CLI session id to resume next turn
     members: list | None = None    # council: per-model {provider, ok, ms}
+    actions: list | None = None    # core: tools executed this turn (tool-use)
 
 
 async def _history(sid: str, limit: int = 20) -> list[dict]:
@@ -206,7 +208,8 @@ async def chat(body: ChatIn):
     elif agent == "guide":
         out.reply, _, _ = await claude.chat_as(_GUIDE_SYS + (("\n\n" + mem) if mem else ""), body.message, hist)
     else:
-        out.reply, _, _ = await claude.chat(body.message, hist, extra_system=mem)
+        r = await orchestrator.run(body.message, hist, extra_system=mem)
+        out.reply, out.actions = r["reply"], (r["actions"] or None)
 
     await _save(sid, "assistant", out.reply)
     await _maybe_summarize(sid)
