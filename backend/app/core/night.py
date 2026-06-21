@@ -64,6 +64,15 @@ async def night_tick() -> dict:
         out["actions"].append({"self_improve_top": (top.get("finding") or {}).get("signal"),
                                "decision": (top.get("result") or {}).get("decision")})
 
+    # 4) Module Factory: build one queued module off the core (budget-gated)
+    ok4, _ = budget.can_spend()
+    if ok4 and budget.status()["builder_runs"] < settings.selfimprove_max_builder_runs:
+        from app.core import module_factory
+        fr = await module_factory.tick()
+        if fr.get("ran"):
+            budget.charge(requests=1, builder=1)
+            out["actions"].append({"factory": fr.get("verdict") or fr.get("error"), "module": fr.get("module")})
+
     out["budget"] = budget.status()
     return out
 

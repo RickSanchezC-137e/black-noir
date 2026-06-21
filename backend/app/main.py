@@ -44,3 +44,14 @@ from app.api import (chat, core, governor, ideas, memory,  # noqa: E402
 for r in (core.router, chat.router, memory.router, governor.router, modules.router,
           ideas.router, tasks.router, selfimprove.router, visual.router, ws.router):
     app.include_router(r)
+
+# Serve the web HUD (same build as desktop) at "/" so it's reachable by link
+# (PC + phone) on the same origin as /api + /ws. Mounted AFTER routers so API wins.
+try:
+    from fastapi.staticfiles import StaticFiles
+    import os as _os
+    _dist = "/home/jarvis/noir/desktop/dist"
+    if _os.path.isdir(_dist):
+        app.mount("/", StaticFiles(directory=_dist, html=True), name="hud")
+except Exception:  # noqa: BLE001
+    pass

@@ -97,17 +97,20 @@ async def triage(source: str, value: str) -> dict:
         from app.core import adoption
         repo = value.replace("https://github.com/", "").replace(".git", "").strip("/")
         rep = await adoption.adopt(repo, capability="", cluster="C6")
-        cat = "good" if rep.get("verdict") in ("adopt", "defer") else "bad"
-        reason = rep.get("reason", "") or rep.get("verdict", "")
-        status = {"good": "accepted", "bad": "rejected"}.get(cat, "new")
+        v = rep.get("verdict")
+        # adopt = готов/внедрён → хорошие; defer = совместим, ждёт обёртку → на разборе; skip = плохие
+        cat = {"adopt": "good", "defer": "review"}.get(v, "bad")
+        reason = rep.get("reason", "") or v
+        status = {"good": "accepted", "review": "new", "bad": "rejected"}.get(cat, "new")
         await _store_idea(f"[repo] {repo} — {reason}", status)
         routed = False
-        if cat == "good":
-            from app.core import selfimprove
+        if cat in ("good", "review"):
+            from app.core import selfimprove, module_factory
             await selfimprove.scout(f"рассмотреть репозиторий {repo} к внедрению",
                                     domain="modules", target_module="mcp_fs", source="intake")
+            module_factory.request_build(kind="repo", repo=repo, cluster="C6")  # фабрика соберёт обёртку off-core
             routed = True
-        return {"category": cat, "reason": reason, "summary": rep.get("verdict"), "routed": routed}
+        return {"category": cat, "reason": reason, "summary": v, "routed": routed}
 
     # everything else → core classification from available metadata
     c = await _classify(source, value)
@@ -120,3 +123,103 @@ async def triage(source: str, value: str) -> dict:
                                 domain="modules", target_module="mcp_fs", source="intake")
         routed = True
     return {"category": c["category"], "reason": c["reason"], "summary": c.get("summary"), "routed": routed}
+
+
+# ---------------- deep per-item analysis (detail panel + readiness) ----------------
+_DETAIL = ("CREATE TABLE IF NOT EXISTS idea_detail(idea_id TEXT PRIMARY KEY, progress INTEGER,"
+           " data TEXT, updated_at TEXT)")
+
+_DEEP_SYS = (
+    "Ты — аналитик входящего для Black Noir. По данным ниже дай развёрнутый разбор. "
+    "Верни СТРОГО JSON: {\"what\":\"что это и что делает\",\"why\":\"зачем/польза владельцу или системе\","
+    "\"structure\":\"кратко об устройстве\",\"fit_cluster\":\"C1..C6\",\"fit_reason\":\"куда и как интегрировать\","
+    "\"overlaps\":\"какой наш модуль дополняет/заменяет или 'нет'\",\"recommendation\":\"внедрить|на доработку|отклонить + почему\","
+    "\"test_plan\":\"как проверить перед внедрением\"}."
+)
+
+
+def _parse_idea(text: str) -> tuple[str, str]:
+    src, val = "text", text
+    if text.startswith("[") and "]" in text:
+        src = text[1:text.index("]")]
+        val = text[text.index("]") + 1:].split(" — ")[0].strip()
+    return src, val
+
+
+async def analyze_detail(idea_id: str) -> dict:
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        row = await (await db.execute("SELECT id,text FROM ideas WHERE id=?", (idea_id,))).fetchone()
+    if not row:
+        return {"error": "idea not found"}
+    src, val = _parse_idea(row["text"])
+    data: dict = {"source": src, "value": val}
+    lic = sec = None
+    structure = readme = ""
+    if src == "repo" or "github.com" in val:
+        from app.core import adoption
+        repo = val.replace("https://github.com/", "").replace(".git", "").strip("/")
+        try:
+            d = adoption.clone(repo)
+            lic = adoption.license_scan(d); sec = adoption.security_scan(d)
+            structure = ", ".join(sorted(p.name for p in d.iterdir())[:25])
+            for n in ("README.md", "README.rst", "readme.md", "Readme.md"):
+                if (d / n).exists():
+                    readme = (d / n).read_text(errors="ignore")[:3000]; break
+        except Exception as e:  # noqa: BLE001
+            data["clone_error"] = str(e)
+    elif src in ("youtube", "reel", "video") and val.startswith("http"):
+        readme = await _yt_context(val)
+
+    from app.core.modules_runtime import manager
+    mods = ", ".join(f"{m['name']}({m.get('cluster')})" for m in manager.list())
+    ctx = (f"источник: {src}\nэлемент: {val}\nструктура: {structure}\n"
+           f"лицензия: {lic}\nбезопасность: {(sec or {}).get('safe') if sec else '-'}\n"
+           f"наши модули: {mods}\nREADME/контекст:\n{readme}")
+    try:
+        raw, _, _ = await claude.chat_as(_DEEP_SYS, ctx)
+        deep = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
+    except Exception as e:  # noqa: BLE001
+        deep = {"what": f"(не удалось разобрать: {e})"}
+    data.update(deep)
+    if lic:
+        data["license"] = lic.get("license"); data["license_ok"] = lic.get("compatible")
+    if sec:
+        data["security_ok"] = sec.get("safe")
+
+    # readiness 0..100
+    prog = 0
+    if data.get("what") and not str(data.get("what")).startswith("(не"):
+        prog += 40
+    if lic is not None:
+        prog += 20 if data.get("license_ok") else 0
+        prog += 20 if data.get("security_ok") else 0
+    else:
+        prog += 30  # non-repo: no license/security gates
+    if str(data.get("recommendation", "")).startswith("внедрить"):
+        prog += 20
+    prog = min(100, prog)
+
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        await db.execute(_DETAIL)
+        await db.execute("INSERT INTO idea_detail(idea_id,progress,data,updated_at) VALUES(?,?,?,?)"
+                         " ON CONFLICT(idea_id) DO UPDATE SET progress=excluded.progress,"
+                         " data=excluded.data, updated_at=excluded.updated_at",
+                         (idea_id, prog, json.dumps(data, ensure_ascii=False),
+                          datetime.now(timezone.utc).isoformat()))
+        await db.commit()
+    return {"idea_id": idea_id, "progress": prog, "data": data}
+
+
+async def get_detail(idea_id: str) -> dict:
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute(_DETAIL)
+        idea = await (await db.execute("SELECT id,text,status,score,created_at FROM ideas WHERE id=?", (idea_id,))).fetchone()
+        det = await (await db.execute("SELECT progress,data,updated_at FROM idea_detail WHERE idea_id=?", (idea_id,))).fetchone()
+    if not idea:
+        return {"error": "idea not found"}
+    out = {"idea": dict(idea), "progress": 0, "data": None}
+    if det:
+        out["progress"] = det["progress"]; out["data"] = json.loads(det["data"]); out["updated_at"] = det["updated_at"]
+    return out

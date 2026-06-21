@@ -37,8 +37,16 @@ class AdoptIn(BaseModel):
 
 
 @router.get("")
-async def list_ideas(limit: int = 20):
-    return {"ideas": await ideas_svc.list_ideas(limit)}
+async def list_ideas(limit: int = 60):
+    """Ideas + per-item readiness progress (left join idea_detail)."""
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute("CREATE TABLE IF NOT EXISTS idea_detail(idea_id TEXT PRIMARY KEY, progress INTEGER, data TEXT, updated_at TEXT)")
+        cur = await db.execute(
+            "SELECT i.id,i.text,i.status,i.score,i.created_at, COALESCE(d.progress,0) progress,"
+            " (d.idea_id IS NOT NULL) analyzed FROM ideas i LEFT JOIN idea_detail d ON d.idea_id=i.id"
+            " ORDER BY i.created_at DESC LIMIT ?", (limit,))
+        return {"ideas": [dict(r) for r in await cur.fetchall()]}
 
 
 @router.post("/generate")
@@ -134,3 +142,16 @@ async def bot_status():
     """Live Telegram bot identity (getMe) — proves the escalation channel is wired."""
     me = await telegram.get_me()
     return {"telegram": me.get("result") if me.get("ok") else me}
+
+
+@router.get("/{idea_id}")
+async def idea_detail(idea_id: str):
+    from app.core import intake as intake_svc
+    return await intake_svc.get_detail(idea_id)
+
+
+@router.post("/{idea_id}/analyze")
+async def idea_analyze(idea_id: str):
+    """Deep-dive: what/why/structure/where-to-integrate/license/security + readiness."""
+    from app.core import intake as intake_svc
+    return await intake_svc.analyze_detail(idea_id)

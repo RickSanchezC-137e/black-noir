@@ -72,3 +72,73 @@ async def build_module(name: str, *, cluster: str = "C6", purpose: str = "",
         except Exception:  # noqa: BLE001
             pass
     return rep
+
+
+# ---------------- autonomous build queue (off-core; processed by the contour) ----------------
+import sqlite3 as _sq
+from app.config import settings as _settings
+
+_QTABLE = ("CREATE TABLE IF NOT EXISTS module_builds(id TEXT PRIMARY KEY, kind TEXT, name TEXT,"
+           " cluster TEXT, purpose TEXT, tools TEXT, repo TEXT, status TEXT, token TEXT,"
+           " verdict TEXT, reason TEXT, created_at TEXT, updated_at TEXT)")
+
+
+def _now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def request_build(*, kind: str = "spec", name: str = "", cluster: str = "C6", purpose: str = "",
+                  tools: list | None = None, repo: str = "") -> dict:
+    """Enqueue a module-build request (the factory processes it off the core)."""
+    import json
+    import uuid
+    bid = "build_" + uuid.uuid4().hex[:10]
+    con = _sq.connect(str(_settings.sqlite_path)); con.execute(_QTABLE)
+    con.execute("INSERT INTO module_builds(id,kind,name,cluster,purpose,tools,repo,status,created_at,updated_at)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (bid, kind, name or (repo.split("/")[-1] if repo else ""), cluster, purpose,
+                 json.dumps(tools or []), repo, "queued", _now(), _now()))
+    con.commit(); con.close()
+    return {"id": bid, "status": "queued", "kind": kind}
+
+
+def list_builds(limit: int = 30) -> list[dict]:
+    con = _sq.connect(str(_settings.sqlite_path)); con.row_factory = _sq.Row; con.execute(_QTABLE)
+    rows = [dict(r) for r in con.execute(
+        "SELECT id,kind,name,cluster,repo,status,token,verdict,reason,updated_at"
+        " FROM module_builds ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()]
+    con.close(); return rows
+
+
+def _set(bid: str, **kw) -> None:
+    kw["updated_at"] = _now()
+    cols = ", ".join(f"{k}=?" for k in kw)
+    con = _sq.connect(str(_settings.sqlite_path))
+    con.execute(f"UPDATE module_builds SET {cols} WHERE id=?", (*kw.values(), bid)); con.commit(); con.close()
+
+
+async def tick() -> dict:
+    """Process the oldest queued build (Builder in sandbox + eval). Off-core (contour/timer)."""
+    import json
+    con = _sq.connect(str(_settings.sqlite_path)); con.row_factory = _sq.Row; con.execute(_QTABLE)
+    row = con.execute("SELECT * FROM module_builds WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
+    con.close()
+    if not row:
+        return {"ran": False, "reason": "очередь пуста"}
+    b = dict(row); _set(b["id"], status="building")
+    try:
+        if b["kind"] == "repo" and b["repo"]:
+            from app.core import adoption
+            r = await adoption.build_wrapper(b["repo"], cluster=b["cluster"] or "C6")
+        else:
+            r = await build_module(b["name"], cluster=b["cluster"] or "C6", purpose=b["purpose"] or "",
+                                   tools=json.loads(b["tools"] or "[]"))
+        v = r.get("verdict")
+        if v == "ready":
+            _set(b["id"], status="ready", token=r.get("token", ""), verdict=v, reason=r.get("reason", ""))
+        else:
+            _set(b["id"], status="failed", verdict=v or "failed", reason=r.get("reason", ""))
+        return {"ran": True, "id": b["id"], "verdict": v, "module": r.get("module_id")}
+    except Exception as e:  # noqa: BLE001
+        _set(b["id"], status="failed", reason=str(e)[:160]); return {"ran": True, "id": b["id"], "error": str(e)}

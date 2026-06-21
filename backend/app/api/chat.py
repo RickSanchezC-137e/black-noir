@@ -180,11 +180,39 @@ def _target_system(target: str) -> str | None:
     return None
 
 
+async def _idea_system(idea_id: str) -> str:
+    """Grounded agent for a specific intake item — knows its analysis (what/why/fit)."""
+    base = ("Ты — агент по разбору этого элемента в Black Noir. Обсуждай ИМЕННО его: "
+            "эффективность, нюансы, что он даст, как и куда встроится в систему, риски, "
+            "стоит ли внедрять. Кратко, по-русски.")
+    try:
+        import json as _j
+        async with aiosqlite.connect(settings.sqlite_path) as db:
+            db.row_factory = aiosqlite.Row
+            r = await (await db.execute("SELECT text FROM ideas WHERE id=?", (idea_id,))).fetchone()
+            d = await (await db.execute("SELECT data FROM idea_detail WHERE idea_id=?", (idea_id,))).fetchone()
+        ctx = []
+        if r:
+            ctx.append("Элемент: " + r["text"])
+        if d:
+            x = _j.loads(d["data"])
+            for k, lbl in (("what", "что"), ("why", "зачем"), ("structure", "структура"), ("fit_cluster", "кластер"), ("fit_reason", "куда/как"), ("recommendation", "рекомендация")):
+                if x.get(k):
+                    ctx.append(f"{lbl}: {x[k]}")
+        if ctx:
+            base += "\n\nКОНТЕКСТ АНАЛИЗА:\n" + "\n".join(ctx)
+    except Exception:
+        pass
+    return base
+
+
 @router.post("/chat", response_model=ChatOut)
 async def chat(body: ChatIn):
     agent = body.agent if body.agent in _AGENTS else "core"
     target = body.target or ""
     tgt_sys = _target_system(target)
+    if target.startswith("idea:"):
+        tgt_sys = await _idea_system(target.split(":", 1)[1])
     # module/task/idea threads get their OWN agent + persistent per-target memory
     sid = body.session_id or (f"agent:{target}" if tgt_sys else str(uuid.uuid4()))
     await _ensure_session(sid)

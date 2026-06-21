@@ -4,12 +4,12 @@
 import * as THREE from "three";
 
 const params = new URLSearchParams(location.search);
+const isTauri = !!window.__TAURI_INTERNALS__ || !!window.__TAURI__;
 const API = (params.get("api") || window.NOIR_API_BASE || (window.__VITE_API_BASE__) ||
-  "https://jarvisgod.duckdns.org").replace(/\/$/, "");
-const WS = API.replace(/^http/, "ws");
+  (isTauri ? "https://jarvisgod.duckdns.org" : "")).replace(/\/$/, "");   // "" = same-origin (browser)
+const WS = API ? API.replace(/^http/, "ws") : (location.origin.replace(/^http/, "ws"));
 const $ = (s) => document.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
-const isTauri = !!window.__TAURI_INTERNALS__ || !!window.__TAURI__;
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 const CLUSTERS = {
@@ -28,7 +28,7 @@ let modules = [], core = null;
 
 // ---------- window controls (Tauri) ----------
 async function setupWindow() {
-  if (!isTauri) return;
+  if (!isTauri) { const wb = document.querySelector(".winbar .wbtns"); if (wb) wb.style.display = "none"; return; }
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const w = getCurrentWindow();
@@ -245,35 +245,30 @@ function openModule(id) {
   ], "overview");
 }
 function openFactory() {
-  mvOpen("ФАБРИКА МОДУЛЕЙ", "C4 · создание новых модулей");
+  mvOpen("ФАБРИКА МОДУЛЕЙ", "C4 · автономная сборка модулей (off-core)");
   const inp = "flex:1;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:5px;border-radius:4px";
-  function renderRes(r) {
-    const out = $("#f-out"); const ev = r.eval || {};
-    out.innerHTML = `<div class="row"><span>модуль</span><span class="chip">${esc(r.module_id)}</span></div><div class="row"><span>вердикт</span><span class="chip">${esc(r.verdict)}</span></div>`
-      + (ev.contract_ok !== undefined ? `<div class="row"><span>контракт</span><span>${ev.contract_ok ? "✓" : "✗"}</span></div>` : "")
-      + (r.reason ? `<div class="m" style="margin:4px 0">${esc(r.reason)}</div>` : "")
-      + (r.diff_stat ? `<div class="m" style="white-space:pre-wrap;opacity:.7">${esc(r.diff_stat)}</div>` : "")
-      + (r.verdict === "ready" && r.token ? `<button class="ico" id="f-prom">СОЗДАТЬ (подтвердить)</button>` : "");
-    const pr = $("#f-prom"); if (pr) pr.onclick = async () => { pr.textContent = "…"; try { const p = await api("/api/modules/factory/promote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: r.token }) }); toast(p.ok ? "Модуль создан, ядро перезапущено" : ("Отказ: " + (p.reason || ""))); if (p.ok) setTimeout(loadModules, 4000); } catch (e) { toast("не удалось создать"); } };
-  }
-  async function form(b) {
-    b.innerHTML = `<h5>СОЗДАТЬ МОДУЛЬ</h5>`
+  async function render(b) {
+    const q = await api("/api/modules/factory/queue"); const builds = q.builds || [];
+    b.innerHTML = `<h5>ЗАКАЗАТЬ МОДУЛЬ</h5>`
       + `<div class="row"><span>имя</span><input id="f-name" placeholder="напр. trade_signals" style="${inp}"/></div>`
       + `<div class="row"><span>кластер</span><select id="f-cl" style="${inp}">${["C1", "C2", "C3", "C4", "C5", "C6"].map((c) => `<option ${c === "C6" ? "selected" : ""}>${c}</option>`).join("")}</select></div>`
       + `<div class="row"><span>назначение</span><input id="f-purpose" placeholder="что делает модуль" style="${inp}"/></div>`
       + `<div class="row"><span>инструменты</span><input id="f-tools" placeholder="через запятую: fetch, analyze" style="${inp}"/></div>`
-      + `<div style="margin-top:10px"><button class="ico" id="f-go">СОБРАТЬ МОДУЛЬ (Builder)</button></div>`
-      + `<div id="f-out" class="m" style="margin-top:8px;opacity:.7">Builder соберёт модуль в песочнице (со своей config-схемой) и прогонит контракт-тест; создание — по твоему подтверждению.</div>`
+      + `<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><button class="ico" id="f-go">В ОЧЕРЕДЬ</button><button class="ico" id="f-tick">СОБРАТЬ СЛЕДУЮЩИЙ СЕЙЧАС</button></div>`
+      + `<div id="f-out" class="m" style="margin-top:6px;opacity:.7">Фабрика собирает модули в песочнице сама (в ночном контуре или по кнопке) — это не грузит ядро. Готовое — на твоё подтверждение.</div>`
+      + `<h5 style="margin-top:14px">ОЧЕРЕДЬ СБОРОК (${builds.length})</h5>`
+      + (builds.map((x) => `<div class="mvcard"><b>${esc(x.name || x.repo || x.id)}</b> <span class="chip">${esc(x.status)}</span> <span class="chip">${esc(x.kind)}</span>` + (x.reason ? `<div class="m">${esc(x.reason)}</div>` : "") + (x.status === "ready" && x.token ? `<div style="margin-top:6px"><button class="ico" data-prom="${esc(x.token)}">ВНЕДРИТЬ (подтвердить)</button></div>` : "") + `</div>`).join("") || "<div class='empty'>очередь пуста</div>")
       + `<h5 style="margin-top:14px">МОДУЛИ СЕЙЧАС (${modules.length})</h5>` + modules.map((m) => `<div class="row"><span>${esc(m.display_name || m.name)}</span><span class="chip">${esc(m.cluster)}</span></div>`).join("");
     $("#f-go").onclick = async () => {
       const name = $("#f-name").value.trim(); if (!name) return;
       const tools = $("#f-tools").value.split(",").map((t) => t.trim()).filter(Boolean).map((n) => ({ name: n, action_class: "read", description: n }));
-      $("#f-out").innerHTML = "<div class='empty'>Builder работает + контракт-тест… минуту-две</div>";
-      try { const r = await api("/api/modules/factory/build", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, cluster: $("#f-cl").value, purpose: $("#f-purpose").value, tools }) }); renderRes(r); }
-      catch (e) { $("#f-out").innerHTML = "<div class='empty'>ошибка сборки</div>"; }
+      await api("/api/modules/factory/request", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, cluster: $("#f-cl").value, purpose: $("#f-purpose").value, tools }) });
+      toast("Модуль поставлен в очередь фабрики"); render(b);
     };
+    $("#f-tick").onclick = async () => { $("#f-out").innerHTML = "<div class='empty'>фабрика собирает следующий из очереди… минуту-две</div>"; try { const r = await api("/api/modules/factory/tick", { method: "POST" }); toast(r.ran ? ("Сборка: " + (r.verdict || r.error || "")) : "очередь пуста"); } catch (e) { toast("ошибка сборки"); } render(b); };
+    b.querySelectorAll("[data-prom]").forEach((c) => c.onclick = async () => { const r = await api("/api/modules/factory/promote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: c.getAttribute("data-prom") }) }); toast(r.ok ? "Модуль создан, ядро перезапущено" : ("Отказ: " + (r.reason || ""))); if (r.ok) setTimeout(loadModules, 4000); render(b); });
   }
-  mvTabset([["create", "СОЗДАТЬ", form], ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:factory", "агенту фабрики модулей…")]], "create");
+  mvTabset([["factory", "ФАБРИКА", render], ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:factory", "агенту фабрики модулей…")]], "factory");
 }
 function openIntake() {
   mvOpen("РАЗБОР ВХОДЯЩЕГО", "C4 · приём/сортировка → самоулучшение");
@@ -284,7 +279,8 @@ function openIntake() {
       + `<select id="mvi-src" style="background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:6px;border-radius:4px"><option value="repo">GitHub-репо</option><option value="youtube">YouTube</option><option value="reel">Рилс</option><option value="link">ссылка</option><option value="video">видео</option><option value="text">текст</option></select>`
       + `<input id="mvi-val" placeholder="ссылка / репо / текст…" style="flex:1;min-width:220px;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:6px;border-radius:4px"/>`
       + `<button class="ico" id="mvi-go">РАЗОБРАТЬ</button></div>`
-      + `<div class="mvkb">${cols.map(([lbl, sts]) => { const here = it.filter((i) => sts.includes(i.status)); return `<div><h4>${lbl} · ${here.length}</h4>${here.map((i) => `<div class="mvcard">${esc(i.text)}<div class="m">${esc(i.status)}</div></div>`).join("") || "<div class='empty'>—</div>"}</div>`; }).join("")}</div>`;
+      + `<div class="mvkb">${cols.map(([lbl, sts]) => { const here = it.filter((i) => sts.includes(i.status)); return `<div><h4>${lbl} · ${here.length}</h4>${here.map((i) => `<div class="mvcard" data-idea="${esc(i.id)}" style="cursor:pointer">${esc(i.text)}<div class="bar" style="margin:4px 0 2px"><i style="width:${i.progress || 0}%"></i></div><div class="m">${esc(i.status)} · ${i.progress || 0}%</div></div>`).join("") || "<div class='empty'>—</div>"}</div>`; }).join("")}</div>`;
+    b.querySelectorAll("[data-idea]").forEach((c) => c.onclick = () => openIdeaDetail(c.getAttribute("data-idea"), () => openIntake()));
     $("#mvi-go").onclick = async () => { const src = $("#mvi-src").value, val = $("#mvi-val").value.trim(); if (!val) return; $("#mvi-go").textContent = "…"; try { const r = await api("/api/ideas/intake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: src, value: val }) }); toast("Разбор: " + (r.category || "?") + (r.routed ? " → самоулучшение" : "")); } catch (e) { toast("ошибка разбора"); } render(b); };
   }
   mvTabset([["board", "РАЗБОР", render], ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:intake", "агенту разбора входящего…")]], "board");
@@ -595,8 +591,8 @@ async function loadIdeas() {
       col.appendChild(el("h4", null, `${lbl} · ${here.length}`));
       if (!here.length) col.appendChild(el("div", "empty", "—"));
       here.forEach((i) => {
-        const c = el("div", "idea", `${esc(i.text)}<div class="m">${esc(i.status)}${i.score != null ? " · " + i.score : ""}</div>`);
-        c.onclick = () => openIdeaInspector(i); col.appendChild(c);
+        const c = el("div", "idea", `${esc(i.text)}<div class="bar" style="margin:4px 0 2px"><i style="width:${i.progress || 0}%"></i></div><div class="m">${esc(i.status)} · готовность ${i.progress || 0}%</div>`);
+        c.onclick = () => openIdeaDetail(i.id, () => mv.classList.remove("on")); col.appendChild(c);
       });
       wrap.appendChild(col);
     });
@@ -614,6 +610,39 @@ function openIdeaInspector(i) {
     ["tests", "ТЕСТЫ", async (b) => { b.innerHTML = "<div class='empty'>тесты по идее ещё не запускались</div>"; }],
     ["chat", "ЧАТ", async (b) => agentChat(b, "idea:" + i.id, "обсудить идею…")],
   ], "info");
+}
+function openIdeaDetail(id, backFn) {
+  mvOpen("РАЗБОР ЭЛЕМЕНТА", "");
+  async function render(b) {
+    const d = await api(`/api/ideas/${id}`); const i = d.idea || {}, x = d.data; const p = d.progress || 0;
+    $("#mv-sub").textContent = (i.text || "").slice(0, 80);
+    const sec = (t, v) => v ? `<h5 style="margin-top:10px">${t}</h5><div class="m" style="opacity:.88">${esc(v)}</div>` : "";
+    let html = `<div class="row"><span>готовность к интеграции</span><span>${p}%</span></div><div class="bar"><i style="width:${p}%"></i></div>`
+      + `<div class="row"><span>статус</span><span class="chip">${esc(i.status)}</span></div>`;
+    if (!x) html += `<div class="m" style="margin:8px 0;opacity:.7">ещё не разобрано — запусти глубокий разбор.</div>`;
+    else html += sec("ЧТО ЭТО", x.what) + sec("ЗАЧЕМ", x.why) + sec("СТРУКТУРА", x.structure)
+      + `<h5 style="margin-top:10px">КУДА ИНТЕГРИРОВАТЬ</h5><div class="row"><span>кластер</span><span class="chip">${esc(x.fit_cluster || "?")}</span></div><div class="m" style="opacity:.88">${esc(x.fit_reason || "")}</div>` + (x.overlaps ? `<div class="m" style="opacity:.6">пересечение: ${esc(x.overlaps)}</div>` : "")
+      + (x.license !== undefined ? `<div class="row" style="margin-top:8px"><span>лицензия / безопасность</span><span>${esc(x.license || "?")} ${x.license_ok ? "✓" : "✗"} · ${x.security_ok ? "чисто" : "риски"}</span></div>` : "")
+      + sec("РЕКОМЕНДАЦИЯ", x.recommendation) + sec("ТЕСТ-ПЛАН", x.test_plan);
+    const isRepo = (i.text || "").startsWith("[repo]") || (x && x.source === "repo");
+    html += `<div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap"><button class="ico" id="d-an">РАЗОБРАТЬ ГЛУБЖЕ</button>`
+      + (isRepo ? `<button class="ico" id="d-wrap">СОБРАТЬ ОБЁРТКУ</button>` : "")
+      + `<button class="ico" id="d-acc">ПРИНЯТЬ</button><button class="ico" id="d-rej">ОТКАЗАТЬ</button></div><div id="d-out" style="margin-top:8px"></div>`;
+    b.innerHTML = html;
+    $("#d-an").onclick = async () => { $("#d-out").innerHTML = "<div class='empty'>разбираю (клон + анализ)… минуту</div>"; await api(`/api/ideas/${id}/analyze`, { method: "POST" }); toast("Разбор обновлён"); render(b); };
+    $("#d-acc").onclick = async () => { const r = await api(`/api/ideas/${id}/accept`, { method: "POST" }); toast("Принято → задача " + (r.task_id || "").slice(0, 8)); await loadIdeas(); render(b); };
+    $("#d-rej").onclick = async () => { await api(`/api/ideas/${id}/reject`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); toast("Отклонено"); await loadIdeas(); render(b); };
+    const w = $("#d-wrap"); if (w) w.onclick = async () => {
+      const repo = ((i.text || "").match(/\[repo\]\s*(\S+)/) || [])[1]; if (!repo) return;
+      $("#d-out").innerHTML = "<div class='empty'>Builder собирает обёртку + контракт-тест… минуту-две</div>";
+      try { const r = await api("/api/ideas/adopt/build", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repo }) });
+        $("#d-out").innerHTML = `<div class="row"><span>обёртка</span><span class="chip">${esc(r.verdict)}</span></div>` + (r.reason ? `<div class="m">${esc(r.reason)}</div>` : "") + (r.verdict === "ready" && r.token ? `<button class="ico" id="d-prom">ВНЕДРИТЬ (подтвердить)</button>` : "");
+        const pr = $("#d-prom"); if (pr) pr.onclick = async () => { const pp = await api("/api/ideas/adopt/promote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: r.token }) }); toast(pp.ok ? "Внедрено, ядро перезапущено" : ("Отказ: " + (pp.reason || ""))); if (pp.ok) setTimeout(loadModules, 4000); };
+      } catch (e) { $("#d-out").innerHTML = "<div class='empty'>ошибка сборки</div>"; }
+    };
+  }
+  mvTabset([["detail", "РАЗБОР", render], ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "idea:" + id, "обсудить этот элемент: эффективность, интеграция…")]], "detail");
+  const bk = el("span", "mvtab", "← НАЗАД"); bk.onclick = backFn || (() => mv.classList.remove("on")); $("#mv-tabs").insertBefore(bk, $("#mv-tabs").firstChild);
 }
 $("#genidea").onclick = async () => { $("#genidea").textContent = "…"; try { await api("/api/ideas/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ n: 2 }) }); await loadIdeas(); } catch (e) {} $("#genidea").textContent = "+ СГЕНЕРИРОВАТЬ"; };
 async function intake(source, value) { if (!value.trim()) return; toast("Разбираю…"); try { const r = await api("/api/ideas/intake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, value }) }); toast("Разбор: " + (r.category || "?") + (r.routed ? " → самоулучшение" : "")); await loadIdeas(); } catch (e) { toast("Не удалось разобрать"); } }
@@ -658,7 +687,7 @@ async function promoteWrapper(token) {
     toast(r.ok ? "Модуль внедрён, ядро перезапускается" : ("Отказ: " + (r.reason || ""))); if (r.ok) { insp.classList.remove("open"); setTimeout(loadModules, 4000); } }
   catch (e) { toast("Внедрение не удалось"); }
 }
-$("#iadd").onclick = () => { const src = $("#isrc").value, val = $("#ival").value; $("#ival").value = ""; if (src === "repo") adoptRepo(val); else intake(src, val); };
+$("#iadd").onclick = () => { const src = $("#isrc").value, val = $("#ival").value; $("#ival").value = ""; intake(src, val); };
 $("#ival").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#iadd").click(); });
 $("#ifile").onclick = () => $("#ideafileinp").click();
 $("#ideafileinp").onchange = (e) => { for (const f of e.target.files) intake("file", f.name); e.target.value = ""; };
@@ -679,7 +708,9 @@ async function loadProfile() {
     const hypsCard = `<div class="card"><h5>ГИПОТЕЗЫ</h5>${hyps.length ? hyps.map((h) => `<div class="row"><span>${esc(h.statement)}</span><span class="chip">${esc(h.verdict || h.status)}</span></div>`).join("") : "<div class='empty'>нет гипотез</div>"}</div>`;
     const healthCard = `<div class="card"><h5>ЗДОРОВЬЕ (наблюдение)</h5>${health.length ? health.slice(0, 8).map((m) => `<div class="row"><span>${esc(m.metric)}</span><span>${esc(m.value)}${m.unit ? " " + esc(m.unit) : ""}</span></div>`).join("") : "<div class='empty'>нет показателей</div>"}</div>`;
     const schedCard = `<div class="card"><h5>РАСПИСАНИЕ</h5>${schedule.length ? schedule.slice(0, 8).map((s) => `<div class="row"><span>${esc(s.title)}</span><span>${esc((s.start || "").slice(0, 16).replace("T", " "))}</span></div>`).join("") : "<div class='empty'>нет событий</div>"}</div>`;
-    $("#prof").innerHTML = domains + metrics + hypsCard + healthCard + schedCard;
+    const securityCard = `<div class="card"><h5>БЕЗОПАСНОСТЬ</h5><div class="row"><span>Логин</span><span>Rick</span></div><div style="margin-top:8px"><button class="ico" id="pw-change">СМЕНИТЬ ПАРОЛЬ</button></div></div>`;
+    $("#prof").innerHTML = domains + metrics + hypsCard + healthCard + schedCard + securityCard;
+    const pc = $("#pw-change"); if (pc) pc.onclick = async () => { const np = prompt("Новый пароль (мин. 6 символов):"); if (!np) return; try { const r = await api("/api/systems/auth/password", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ new_password: np }) }); toast(r.ok ? "Пароль изменён — войди заново при следующем запросе" : ("Ошибка: " + (r.reason || ""))); } catch (e) { toast("Не удалось сменить пароль"); } };
   } catch (e) { $("#prof").innerHTML = "<div class='empty'>нет данных профиля</div>"; }
 }
 

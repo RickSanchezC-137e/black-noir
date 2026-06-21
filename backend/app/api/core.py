@@ -72,6 +72,20 @@ async def uptime():
     return {"uptime_seconds": time.time() - _START}
 
 
+from pydantic import BaseModel as _BM
+
+
+class _PwIn(_BM):
+    new_password: str
+
+
+@router.post("/systems/auth/password")
+async def change_password(body: _PwIn):
+    """Change the web/desktop login password (Caddy basic_auth)."""
+    from app.core import webauth
+    return webauth.set_password(body.new_password)
+
+
 @router.get("/systems/metrics")
 async def metrics():
     """Real host metrics (Rule 6/7) — no demo numbers."""

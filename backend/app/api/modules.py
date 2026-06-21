@@ -45,6 +45,27 @@ async def factory_build(body: FactoryIn):
                                              tools=body.tools, config=body.config)
 
 
+@router.post("/factory/request")
+async def factory_request(body: FactoryIn):
+    """Enqueue a module build (factory processes it autonomously, off the core)."""
+    from app.core import module_factory
+    return module_factory.request_build(kind="spec", name=body.name, cluster=body.cluster,
+                                        purpose=body.purpose, tools=body.tools)
+
+
+@router.get("/factory/queue")
+async def factory_queue():
+    from app.core import module_factory
+    return {"builds": module_factory.list_builds()}
+
+
+@router.post("/factory/tick")
+async def factory_tick():
+    """Process one queued build now (also driven by the night contour)."""
+    from app.core import module_factory
+    return await module_factory.tick()
+
+
 @router.post("/factory/promote")
 async def factory_promote(body: FactoryPromoteIn):
     from app.core import adoption
