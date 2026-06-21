@@ -31,6 +31,7 @@ class Manifest:
     namespace: str               # m_<id>__ private SQLite/Chroma namespace
     tools: list[ToolSpec] = field(default_factory=list)
     capabilities: dict[str, Any] = field(default_factory=dict)
+    config: list = field(default_factory=list)   # per-module settings schema for the UI
     description: str = ""
 
     def tool(self, name: str) -> ToolSpec | None:
@@ -64,5 +65,6 @@ def load_manifest(yaml_path) -> Manifest:
         version=str(d["version"]), runtime=d.get("runtime", "in-process"),
         namespace=d.get("namespace", f"m_{d['module_id'].replace('-', '_')}__"),
         tools=tools, capabilities=d.get("capabilities", {}),
+        config=d.get("config", []),
         description=d.get("description", ""),
     )

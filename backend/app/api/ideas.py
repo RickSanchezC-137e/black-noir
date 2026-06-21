@@ -48,18 +48,12 @@ async def generate(body: GenIn):
 
 @router.post("/intake")
 async def intake(body: IntakeIn):
-    """Accept an idea source (repo/link/file/video/text) into the review column."""
+    """Ingest → study → sort (good/bad/review) → route worthy items to self-improvement."""
     val = body.value.strip()
     if not val:
         raise HTTPException(422, "empty value")
-    iid = str(uuid.uuid4())
-    text = f"[{body.source}] {val}"
-    async with aiosqlite.connect(settings.sqlite_path) as db:
-        await db.execute(
-            "INSERT INTO ideas(id,text,status,created_at) VALUES(?,?,?,?)",
-            (iid, text, "new", datetime.now(timezone.utc).isoformat()))
-        await db.commit()
-    return {"id": iid, "text": text, "status": "new"}
+    from app.core import intake as intake_svc
+    return await intake_svc.triage(body.source, val)
 
 
 async def _set_status(idea_id: str, status: str) -> None:

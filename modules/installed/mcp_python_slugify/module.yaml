@@ -1,0 +1,16 @@
+manifest_version: 1
+module_id: mcp_python_slugify
+cluster: C6
+display_name: "Slugify (python-slugify)"
+description: "Turn arbitrary (unicode) text into URL-safe slugs via the python-slugify engine."
+version: 1.0.0
+runtime: in-process
+namespace: m_mcp_python_slugify__
+tools:
+  - { name: slugify.make, action_class: local_write, description: "Make a slug from the given text" }
+capabilities:
+  filesystem: none
+  network: none
+  action_classes: [local_write]
+  origin: "github.com/un33k/python-slugify"
+  license: "MIT (engine adopted as lib; bundles text-unidecode GPL/Artistic by default)"

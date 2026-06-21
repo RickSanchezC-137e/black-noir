@@ -67,7 +67,35 @@ class ModuleManager:
             r["cluster"] = man.cluster if man else None
             r["display_name"] = man.display_name if man else r["name"]
             r["tools"] = [t.name for t in man.tools] if man else []
+            schema = list(man.config) if man else []
+            if schema:
+                vals = self._config_values(r["name"])
+                for f in schema:
+                    if f.get("key") in vals:
+                        f["value"] = vals[f["key"]]
+            r["config"] = schema
         return rows
+
+    def _config_values(self, module_id: str) -> dict:
+        import sqlite3
+        try:
+            con = sqlite3.connect(str(settings.sqlite_path))
+            con.execute("CREATE TABLE IF NOT EXISTS module_config(module_id TEXT, key TEXT, value TEXT, PRIMARY KEY(module_id,key))")
+            rows = con.execute("SELECT key,value FROM module_config WHERE module_id=?", (module_id,)).fetchall()
+            con.close()
+            return {k: v for k, v in rows}
+        except sqlite3.Error:
+            return {}
+
+    def set_config(self, module_id: str, key: str, value) -> dict:
+        import json as _j
+        import sqlite3
+        con = sqlite3.connect(str(settings.sqlite_path))
+        con.execute("CREATE TABLE IF NOT EXISTS module_config(module_id TEXT, key TEXT, value TEXT, PRIMARY KEY(module_id,key))")
+        con.execute("INSERT INTO module_config(module_id,key,value) VALUES(?,?,?) ON CONFLICT(module_id,key) DO UPDATE SET value=excluded.value",
+                    (module_id, key, value if isinstance(value, str) else _j.dumps(value)))
+        con.commit(); con.close()
+        return {"ok": True, "module": module_id, "key": key, "value": value}
 
     def install_report(self) -> list[dict]:
         return self._install_report

@@ -152,9 +152,13 @@ function renderImprove(r) {
 }
 
 function mvOpen(title, sub) { mv.classList.add("on"); $("#mv-title").textContent = title; $("#mv-sub").textContent = sub || ""; }
+let mvTimer = null;
+function clearMvTimer() { if (mvTimer) { clearInterval(mvTimer); mvTimer = null; } }
+function mvLive(fn, ms) { clearMvTimer(); fn(); mvTimer = setInterval(() => { if (!mv.classList.contains("on")) return clearMvTimer(); fn(); }, ms || 4000); }
 function mvTabset(defs, def) {
   const tabs = $("#mv-tabs"), body = $("#mv-body"); tabs.innerHTML = ""; let active = def;
   const render = async () => {
+    clearMvTimer();
     tabs.querySelectorAll(".mvtab").forEach((x) => x.classList.toggle("on", x.dataset.k === active));
     body.innerHTML = "<div class='empty'>загрузка…</div>";
     try { await defs.find((d) => d[0] === active)[2](body); } catch (e) { body.innerHTML = `<div class='empty'>нет данных (${esc(e.message)})</div>`; }
@@ -162,43 +166,171 @@ function mvTabset(defs, def) {
   defs.forEach(([k, lbl]) => { const t = el("span", "mvtab", lbl); t.dataset.k = k; t.onclick = () => { active = k; render(); }; tabs.appendChild(t); });
   render();
 }
+function mvDetail(html, backFn) {
+  clearMvTimer(); const body = $("#mv-body");
+  body.innerHTML = `<div style="margin-bottom:8px"><button class="ico" id="mv-back">← НАЗАД</button></div>` + html;
+  const bk = $("#mv-back"); if (bk) bk.onclick = backFn;
+}
+const J = (x) => esc(JSON.stringify(x));
+async function openHyp(id, backFn) {
+  const d = await api(`/api/systems/selfimprove/hypothesis/${id}`); const h = d.hypothesis, e = d.experiment, v = d.verdict;
+  let html = `<h5>ГИПОТЕЗА · <span class="chip">${esc(h.status)}</span></h5><div style="margin:6px 0">${esc(h.summary || h.intent)}</div>`
+    + `<div class="row"><span>источник</span><span>${esc(h.source)}</span></div>`
+    + `<div class="row"><span>тип · домен</span><span>${esc(h.kind)} · ${esc(h.domain)}</span></div>`
+    + `<div class="row"><span>impact / confidence / cost</span><span>${h.impact} / ${h.confidence} / ${h.cost}</span></div>`
+    + `<div class="row"><span>приоритет</span><span>${h.priority}</span></div>`
+    + (h.intent && h.intent !== h.summary ? `<div class="m" style="margin-top:6px">${esc(h.intent)}</div>` : "")
+    + (h.archived_reason ? `<div class="m" style="margin-top:6px;color:#ff7a6b">причина: ${esc(h.archived_reason)}</div>` : "");
+  html += `<h5 style="margin-top:12px">ХОД АНАЛИЗА</h5>`;
+  if (e) html += `<div class="mvcard">эксперимент ${esc((e.id || "").slice(0, 8))} · <span class="chip">${esc(e.status)}</span><div class="m">конституция: ${J(e.constitution)}</div><div class="m">eval: ${J(e.eval)}</div></div>`;
+  else html += `<div class="empty">эксперимент ещё не запускался (в очереди)</div>`;
+  if (v) html += `<div class="mvcard">вердикт: <span class="chip">${esc(v.decision)}</span><div class="m">governor: ${J(v.governor)}</div><div class="m">quality: ${J(v.quality_gate)}</div></div>`;
+  if (h.status === "rejected" || h.status === "skip") html += `<h5 style="margin-top:12px">ВЕРНУТЬ НА ДОРАБОТКУ</h5><div style="display:flex;gap:6px"><input id="rw-i" style="flex:1;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:6px;border-radius:4px" placeholder="промт к доработке (что учесть)…"/><button class="ico" id="rw-go">ВЕРНУТЬ В ОЧЕРЕДЬ</button></div>`;
+  mvDetail(html, backFn);
+  const rw = $("#rw-go"); if (rw) rw.onclick = async () => { await api(`/api/systems/selfimprove/hypothesis/${id}/rework`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: $("#rw-i").value }) }); toast("Гипотеза возвращена в очередь на доработку"); backFn(); };
+}
+async function openExp(id, backFn) {
+  const d = await api(`/api/systems/selfimprove/experiment/${id}`); const e = d.experiment, v = d.verdict;
+  const html = `<h5>ЭКСПЕРИМЕНТ ${esc((e.id || "").slice(0, 8))}</h5>`
+    + `<div class="row"><span>домен</span><span>${esc(e.domain)}</span></div>`
+    + `<div class="row"><span>статус</span><span class="chip">${esc(e.status)}</span></div>`
+    + `<div class="row"><span>гипотеза</span><span>${esc((e.hypothesis_id || "").slice(0, 8))}</span></div>`
+    + `<div class="m" style="margin-top:6px">конституция: ${J(e.constitution)}</div>`
+    + `<div class="m" style="margin-top:4px">eval: ${J(e.eval)}</div>`
+    + (v ? `<div class="mvcard" style="margin-top:8px">вердикт: <span class="chip">${esc(v.decision)}</span></div>` : "");
+  mvDetail(html, backFn);
+}
+async function improveModulesList(b) {
+  b.innerHTML = `<div class="m" style="margin-bottom:8px;opacity:.7">выбери модуль — как он построен сейчас, лог улучшений и улучшить:</div>`
+    + modules.map((m) => `<div class="mvcard" data-im="${esc(m.name)}" style="cursor:pointer">${esc(m.display_name || m.name)} <span class="chip">${esc(m.cluster)}</span><div class="m">${esc(m.status)} · v${esc(m.version)} · ${(m.tools || []).length} tools</div></div>`).join("") || "<div class='empty'>нет модулей</div>";
+  b.querySelectorAll("[data-im]").forEach((c) => c.onclick = () => openModuleImprove(c.getAttribute("data-im"), () => improveModulesList(b)));
+}
+async function openModuleImprove(id, backFn) {
+  const s = await api(`/api/modules/${id}/source`);
+  const html = `<h5>${esc(id)} — КАК ПОСТРОЕН СЕЙЧАС</h5><div class="m">файлы: ${esc((s.files || []).join(", ")) || "—"}</div>`
+    + (s.manifest ? `<pre style="max-height:200px;overflow:auto;font-size:10px;border:1px solid rgba(127,127,127,.5);border-radius:4px;padding:6px;white-space:pre-wrap">${esc(s.manifest)}</pre>` : "")
+    + `<h5 style="margin-top:10px">ЛОГ УЛУЧШЕНИЙ</h5>` + ((s.improvements || []).map((v) => `<div class="row"><span>v${esc(v.version)} · ${esc((v.created_at || "").slice(0, 16).replace("T", " "))}</span><span class="chip">${v.active ? "активна" : ""}</span></div>`).join("") || "<div class='empty'>пока без улучшений</div>")
+    + `<h5 style="margin-top:10px">УЛУЧШИТЬ</h5><div id="imp-host"></div>`;
+  mvDetail(html, backFn);
+  improvePanel($("#imp-host"), id);
+}
 function openModule(id) {
   if (id === "selfimprove") return openSelfImprove();
+  if (id === "intake") return openIntake();
+  if (id === "factory") return openFactory();
   const m = modules.find((x) => x.name === id) || { name: id };
   mvOpen(m.display_name || m.name, (m.cluster || "") + " · " + (m.status || ""));
   mvTabset([
     ["overview", "ОБЗОР", async (b) => { b.innerHTML = `<div class="row"><span>статус</span><span class="chip">${esc(m.status)}</span></div><div class="row"><span>кластер</span><span>${esc(m.cluster)}</span></div><div class="row"><span>версия</span><span>v${esc(m.version)}</span></div><div class="row"><span>инструменты</span><span>${esc((m.tools || []).join(", "))}</span></div>`; }],
-    ["logs", "ЛОГИ", async (b) => { const d = await api(`/api/modules/${id}/logs?tail=60`); b.innerHTML = (d.logs || []).map((l) => `<div class="tlog">${esc((l.ts || "").slice(11, 19))} [${esc(l.level)}] ${esc(l.event)} ${esc(l.payload || "")}</div>`).join("") || "<div class='empty'>нет логов</div>"; }],
+    ["logs", "ЛОГИ (live)", async (b) => mvLive(async () => { const d = await api(`/api/modules/${id}/logs?tail=60`); b.innerHTML = (d.logs || []).map((l) => `<div class="tlog">${esc((l.ts || "").slice(11, 19))} [${esc(l.level)}] ${esc(l.event)} ${esc(l.payload || "")}</div>`).join("") || "<div class='empty'>нет логов</div>"; }, 4000)],
     ["mem", "ПАМЯТЬ", async (b) => { const d = await api(`/api/memory?module=${id}`); b.innerHTML = (d.items || []).map((x) => `<div class="row"><span>${esc(x.value)}</span><span class="chip">${esc(x.type || x.key)}</span></div>`).join("") || "<div class='empty'>нет данных</div>"; }],
-    ["cfg", "НАСТРОЙКИ", async (b) => { b.innerHTML = `<div class="row"><span>включён</span><span class="chip">${m.enabled ? "да" : "нет"}</span></div><div style="margin-top:9px"><button class="ico" id="mv-tog">${m.enabled ? "ОТКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button></div>`; const t = $("#mv-tog"); if (t) t.onclick = async () => { await api(`/api/modules/${id}/${m.enabled ? "disable" : "enable"}`, { method: "POST" }); await loadModules(); openModule(id); }; }],
+    ["cfg", "НАСТРОЙКИ", async (b) => {
+      const cfg = m.config || [];
+      const inp = "background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:3px 6px;border-radius:3px";
+      let html = `<div class="row"><span>включён</span><span class="chip">${m.enabled ? "да" : "нет"}</span></div><div style="margin:8px 0"><button class="ico" id="mv-tog">${m.enabled ? "ОТКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button></div>`;
+      if (cfg.length) {
+        html += `<h5>НАСТРОЙКИ МОДУЛЯ</h5>` + cfg.map((f) => {
+          const v = f.value !== undefined ? f.value : (f.default !== undefined ? f.default : "");
+          if (f.type === "toggle") return `<div class="row"><span>${esc(f.label || f.key)}</span><input type="checkbox" data-ck="${esc(f.key)}" ${(v === true || String(v) === "true") ? "checked" : ""}/></div>`;
+          if (f.type === "select") return `<div class="row"><span>${esc(f.label || f.key)}</span><select data-ck="${esc(f.key)}" style="${inp}">${(f.options || []).map((o) => `<option ${String(v) === String(o) ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></div>`;
+          return `<div class="row"><span>${esc(f.label || f.key)}</span><input type="${f.type === "number" ? "number" : "text"}" data-ck="${esc(f.key)}" value="${esc(v)}" style="${inp}"/></div>`;
+        }).join("") + `<div style="margin-top:8px"><button class="ico" id="cfg-save">СОХРАНИТЬ</button></div>`;
+      } else html += `<div class="m" style="opacity:.6;margin-top:6px">у модуля нет настраиваемых параметров</div>`;
+      b.innerHTML = html;
+      const t = $("#mv-tog"); if (t) t.onclick = async () => { await api(`/api/modules/${id}/${m.enabled ? "disable" : "enable"}`, { method: "POST" }); await loadModules(); openModule(id); };
+      const sv = $("#cfg-save"); if (sv) sv.onclick = async () => { for (const e of b.querySelectorAll("[data-ck]")) { const key = e.getAttribute("data-ck"); const val = e.type === "checkbox" ? e.checked : e.value; await api(`/api/modules/${id}/config`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, value: val }) }); } toast("Настройки сохранены"); await loadModules(); };
+    }],
     ["improve", "УЛУЧШИТЬ", async (b) => improvePanel(b, id)],
     ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:" + id, "агенту " + id + "…")],
   ], "overview");
 }
+function openFactory() {
+  mvOpen("ФАБРИКА МОДУЛЕЙ", "C4 · создание новых модулей");
+  const inp = "flex:1;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:5px;border-radius:4px";
+  function renderRes(r) {
+    const out = $("#f-out"); const ev = r.eval || {};
+    out.innerHTML = `<div class="row"><span>модуль</span><span class="chip">${esc(r.module_id)}</span></div><div class="row"><span>вердикт</span><span class="chip">${esc(r.verdict)}</span></div>`
+      + (ev.contract_ok !== undefined ? `<div class="row"><span>контракт</span><span>${ev.contract_ok ? "✓" : "✗"}</span></div>` : "")
+      + (r.reason ? `<div class="m" style="margin:4px 0">${esc(r.reason)}</div>` : "")
+      + (r.diff_stat ? `<div class="m" style="white-space:pre-wrap;opacity:.7">${esc(r.diff_stat)}</div>` : "")
+      + (r.verdict === "ready" && r.token ? `<button class="ico" id="f-prom">СОЗДАТЬ (подтвердить)</button>` : "");
+    const pr = $("#f-prom"); if (pr) pr.onclick = async () => { pr.textContent = "…"; try { const p = await api("/api/modules/factory/promote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: r.token }) }); toast(p.ok ? "Модуль создан, ядро перезапущено" : ("Отказ: " + (p.reason || ""))); if (p.ok) setTimeout(loadModules, 4000); } catch (e) { toast("не удалось создать"); } };
+  }
+  async function form(b) {
+    b.innerHTML = `<h5>СОЗДАТЬ МОДУЛЬ</h5>`
+      + `<div class="row"><span>имя</span><input id="f-name" placeholder="напр. trade_signals" style="${inp}"/></div>`
+      + `<div class="row"><span>кластер</span><select id="f-cl" style="${inp}">${["C1", "C2", "C3", "C4", "C5", "C6"].map((c) => `<option ${c === "C6" ? "selected" : ""}>${c}</option>`).join("")}</select></div>`
+      + `<div class="row"><span>назначение</span><input id="f-purpose" placeholder="что делает модуль" style="${inp}"/></div>`
+      + `<div class="row"><span>инструменты</span><input id="f-tools" placeholder="через запятую: fetch, analyze" style="${inp}"/></div>`
+      + `<div style="margin-top:10px"><button class="ico" id="f-go">СОБРАТЬ МОДУЛЬ (Builder)</button></div>`
+      + `<div id="f-out" class="m" style="margin-top:8px;opacity:.7">Builder соберёт модуль в песочнице (со своей config-схемой) и прогонит контракт-тест; создание — по твоему подтверждению.</div>`
+      + `<h5 style="margin-top:14px">МОДУЛИ СЕЙЧАС (${modules.length})</h5>` + modules.map((m) => `<div class="row"><span>${esc(m.display_name || m.name)}</span><span class="chip">${esc(m.cluster)}</span></div>`).join("");
+    $("#f-go").onclick = async () => {
+      const name = $("#f-name").value.trim(); if (!name) return;
+      const tools = $("#f-tools").value.split(",").map((t) => t.trim()).filter(Boolean).map((n) => ({ name: n, action_class: "read", description: n }));
+      $("#f-out").innerHTML = "<div class='empty'>Builder работает + контракт-тест… минуту-две</div>";
+      try { const r = await api("/api/modules/factory/build", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, cluster: $("#f-cl").value, purpose: $("#f-purpose").value, tools }) }); renderRes(r); }
+      catch (e) { $("#f-out").innerHTML = "<div class='empty'>ошибка сборки</div>"; }
+    };
+  }
+  mvTabset([["create", "СОЗДАТЬ", form], ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:factory", "агенту фабрики модулей…")]], "create");
+}
+function openIntake() {
+  mvOpen("РАЗБОР ВХОДЯЩЕГО", "C4 · приём/сортировка → самоулучшение");
+  async function render(b) {
+    const d = await api("/api/ideas?limit=60"); const it = d.ideas || [];
+    const cols = [["НА РАЗБОРЕ", ["new", "review"]], ["ХОРОШИЕ → самоулучшение", ["accepted"]], ["ПЛОХИЕ", ["rejected"]]];
+    b.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">`
+      + `<select id="mvi-src" style="background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:6px;border-radius:4px"><option value="repo">GitHub-репо</option><option value="youtube">YouTube</option><option value="reel">Рилс</option><option value="link">ссылка</option><option value="video">видео</option><option value="text">текст</option></select>`
+      + `<input id="mvi-val" placeholder="ссылка / репо / текст…" style="flex:1;min-width:220px;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:6px;border-radius:4px"/>`
+      + `<button class="ico" id="mvi-go">РАЗОБРАТЬ</button></div>`
+      + `<div class="mvkb">${cols.map(([lbl, sts]) => { const here = it.filter((i) => sts.includes(i.status)); return `<div><h4>${lbl} · ${here.length}</h4>${here.map((i) => `<div class="mvcard">${esc(i.text)}<div class="m">${esc(i.status)}</div></div>`).join("") || "<div class='empty'>—</div>"}</div>`; }).join("")}</div>`;
+    $("#mvi-go").onclick = async () => { const src = $("#mvi-src").value, val = $("#mvi-val").value.trim(); if (!val) return; $("#mvi-go").textContent = "…"; try { const r = await api("/api/ideas/intake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: src, value: val }) }); toast("Разбор: " + (r.category || "?") + (r.routed ? " → самоулучшение" : "")); } catch (e) { toast("ошибка разбора"); } render(b); };
+  }
+  mvTabset([["board", "РАЗБОР", render], ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:intake", "агенту разбора входящего…")]], "board");
+}
 function openSelfImprove() {
   mvOpen("САМОУЛУЧШЕНИЕ", "C4 · автономный контур 24/7");
   const HCOLS = [["ОЧЕРЕДЬ", ["queued", "new"]], ["ПРИНЯТО", ["promoted", "confirmed"]], ["ОТКЛОНЕНО", ["rejected", "skip"]]];
+  const board = () => api("/api/systems/selfimprove/board");
+  async function rOverview(b) {
+    const d = await board(); const bd = d.budget || {}, a = (d.analysis || {}).signals || {};
+    const byS = {}; (d.hypotheses || []).forEach((h) => byS[h.status] = (byS[h.status] || 0) + 1);
+    const act = (d.versions || []).filter((v) => v.active).length;
+    b.innerHTML = `<div class="syswrap">`
+      + `<div class="card"><h5>ГИПОТЕЗЫ</h5>${Object.entries(byS).map(([k, v]) => `<div class="row"><span>${esc(k)}</span><span>${v}</span></div>`).join("") || "<div class='empty'>—</div>"}</div>`
+      + `<div class="card"><h5>КОНТУР</h5><div class="row"><span>Экспериментов</span><span>${d.experiments.length}</span></div><div class="row"><span>Версий (активных)</span><span>${d.versions.length} (${act})</span></div><div class="row"><span>Модулей</span><span>${modules.length}</span></div></div>`
+      + `<div class="card"><h5>БЮДЖЕТ (сегодня)</h5>${Object.entries(bd).map(([k, v]) => `<div class="row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join("") || "<div class='empty'>—</div>"}</div>`
+      + `<div class="card"><h5>САМОАНАЛИЗ</h5><div class="row"><span>Сигналов</span><span>${a.total_findings || 0}</span></div><div class="row"><span>сбои/модули/задачи</span><span>${a.exec_failures || 0}/${a.module_errors || 0}/${a.task_errors || 0}</span></div><div style="margin-top:8px"><button class="ico" id="mv-an">ЗАПУСТИТЬ САМОАНАЛИЗ</button></div></div>`
+      + `</div>`;
+    const an = $("#mv-an"); if (an) an.onclick = async () => { an.textContent = "…"; await api("/api/systems/selfimprove/analyze", { method: "POST" }); toast("Самоанализ выполнен"); rOverview(b); };
+  }
+  async function rHyps(b) {
+    const d = await board();
+    b.innerHTML = `<div class="mvkb">${HCOLS.map(([lbl, sts]) => { const here = d.hypotheses.filter((h) => sts.includes(h.status)); return `<div><h4>${lbl} · ${here.length}</h4>${here.map((h) => `<div class="mvcard" data-h="${esc(h.id)}" style="cursor:pointer">${esc(h.summary || h.intent || h.id)}<div class="m">${esc(h.kind || "")} · ${esc(h.domain || "")} · prio ${h.priority ?? ""}</div></div>`).join("") || "<div class='empty'>—</div>"}</div>`; }).join("")}</div>`;
+    b.querySelectorAll("[data-h]").forEach((c) => c.onclick = () => openHyp(c.getAttribute("data-h"), () => rHyps(b)));
+  }
+  async function rExp(b) {
+    const d = await board();
+    b.innerHTML = `<h5>ЭКСПЕРИМЕНТЫ</h5>` + (d.experiments.map((e) => `<div class="mvcard" data-e="${esc(e.id)}" style="cursor:pointer">${esc(e.domain)} <span class="chip">${esc(e.status)}</span><div class="m">${esc((e.started_at || "").slice(0, 19).replace("T", " "))}</div></div>`).join("") || "<div class='empty'>—</div>") + `<h5 style="margin-top:12px">ВЕРСИИ</h5>` + (d.versions.map((v) => `<div class="row"><span>${esc(v.domain || "")} v${esc(v.version ?? "")}</span><span class="chip">${v.active ? "активна" : ""}</span></div>`).join("") || "<div class='empty'>—</div>");
+    b.querySelectorAll("[data-e]").forEach((c) => c.onclick = () => openExp(c.getAttribute("data-e"), () => rExp(b)));
+  }
+  async function rActivity(b) {
+    mvLive(async () => { const d = await board(); b.innerHTML = (d.audit || []).map((a) => `<div class="tlog">${esc((a.created_at || "").slice(11, 19))} ${esc(a.module)}.${esc(a.tool)} → ${esc(a.decision)} ${a.ok ? "ok" : "fail"}</div>`).join("") || "<div class='empty'>—</div>"; }, 4000);
+  }
+  async function rTasks(b) {
+    const d = await board(); const byH = {}; (d.experiments || []).forEach((e) => { (byH[e.hypothesis_id] = byH[e.hypothesis_id] || []).push(e); });
+    b.innerHTML = (d.hypotheses || []).slice(0, 24).map((h) => `<div class="mvcard"><b data-h="${esc(h.id)}" style="cursor:pointer">${esc(h.summary || h.intent || h.id)}</b> <span class="chip">${esc(h.status)}</span>` + ((byH[h.id] || []).map((e) => `<div class="m" data-e="${esc(e.id)}" style="cursor:pointer">↳ эксперимент ${esc((e.id || "").slice(0, 8))} · ${esc(e.status)}</div>`).join("") || "<div class='m' style='opacity:.5'>подзадач нет</div>") + `</div>`).join("") || "<div class='empty'>нет задач контура</div>";
+    b.querySelectorAll("[data-h]").forEach((c) => c.onclick = () => openHyp(c.getAttribute("data-h"), () => rTasks(b)));
+    b.querySelectorAll("[data-e]").forEach((c) => c.onclick = () => openExp(c.getAttribute("data-e"), () => rTasks(b)));
+  }
   mvTabset([
-    ["overview", "ОБЗОР", async (b) => {
-      const d = await api("/api/systems/selfimprove/board"); const bd = d.budget || {}, a = (d.analysis || {}).signals || {};
-      b.innerHTML = `<div class="syswrap"><div class="card"><h5>КОНТУР</h5><div class="row"><span>Гипотез</span><span>${d.hypotheses.length}</span></div><div class="row"><span>Экспериментов</span><span>${d.experiments.length}</span></div><div class="row"><span>Версий</span><span>${d.versions.length}</span></div></div><div class="card"><h5>БЮДЖЕТ (сегодня)</h5>${Object.entries(bd).map(([k, v]) => `<div class="row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join("") || "<div class='empty'>—</div>"}</div></div><div style="padding:10px 0"><button class="ico" id="mv-an">ЗАПУСТИТЬ САМОАНАЛИЗ</button> <span class="vlbl">сигналов: ${a.total_findings || 0}</span></div>`;
-      const an = $("#mv-an"); if (an) an.onclick = async () => { an.textContent = "…"; await api("/api/systems/selfimprove/analyze", { method: "POST" }); toast("Самоанализ выполнен"); openSelfImprove(); };
-    }],
-    ["hyps", "ГИПОТЕЗЫ", async (b) => {
-      const d = await api("/api/systems/selfimprove/board");
-      b.innerHTML = `<div class="mvkb">${HCOLS.map(([lbl, sts]) => { const here = d.hypotheses.filter((h) => sts.includes(h.status)); return `<div><h4>${lbl} · ${here.length}</h4>${here.map((h) => `<div class="mvcard">${esc(h.summary || h.intent || h.id)}<div class="m">${esc(h.kind || "")} · ${esc(h.domain || "")} · prio ${h.priority ?? ""}</div></div>`).join("") || "<div class='empty'>—</div>"}</div>`; }).join("")}</div>`;
-    }],
-    ["exp", "ЭКСПЕРИМЕНТЫ/ВЕРСИИ", async (b) => {
-      const d = await api("/api/systems/selfimprove/board");
-      b.innerHTML = `<h5>ЭКСПЕРИМЕНТЫ</h5>` + (d.experiments.map((e) => `<div class="mvcard">${esc(e.domain)} <span class="chip">${esc(e.status)}</span><div class="m">${esc((e.started_at || "").slice(0, 19).replace("T", " "))}</div></div>`).join("") || "<div class='empty'>—</div>") + `<h5 style="margin-top:12px">ВЕРСИИ</h5>` + (d.versions.map((v) => `<div class="row"><span>${esc(v.domain || "")} v${esc(v.version ?? "")}</span><span class="chip">${v.active ? "активна" : ""}</span></div>`).join("") || "<div class='empty'>—</div>");
-    }],
-    ["activity", "ЛОГ КОНТУРА", async (b) => { const d = await api("/api/systems/selfimprove/board"); b.innerHTML = (d.audit || []).map((a) => `<div class="tlog">${esc((a.created_at || "").slice(11, 19))} ${esc(a.module)}.${esc(a.tool)} → ${esc(a.decision)} ${a.ok ? "ok" : "fail"}</div>`).join("") || "<div class='empty'>—</div>"; }],
-    ["tasks", "ЗАДАЧИ/ПОДЗАДАЧИ", async (b) => {
-      const d = await api("/api/systems/selfimprove/board");
-      const byH = {}; (d.experiments || []).forEach((e) => { (byH[e.hypothesis_id] = byH[e.hypothesis_id] || []).push(e); });
-      b.innerHTML = (d.hypotheses || []).slice(0, 24).map((h) => `<div class="mvcard"><b>${esc(h.summary || h.intent || h.id)}</b> <span class="chip">${esc(h.status)}</span>` + ((byH[h.id] || []).map((e) => `<div class="m">↳ эксперимент ${esc((e.id || "").slice(0, 8))} · ${esc(e.status)} · ${esc((e.started_at || "").slice(0, 16).replace("T", " "))}</div>`).join("") || "<div class='m' style='opacity:.5'>подзадач нет</div>") + `</div>`).join("") || "<div class='empty'>нет задач контура</div>";
-    }],
-    ["improve", "УЛУЧШИТЬ", async (b) => improvePanel(b, "selfimprove")],
+    ["overview", "ОБЗОР", rOverview],
+    ["hyps", "ГИПОТЕЗЫ", rHyps],
+    ["exp", "ЭКСПЕРИМЕНТЫ/ВЕРСИИ", rExp],
+    ["activity", "ЛОГ КОНТУРА (live)", rActivity],
+    ["tasks", "ЗАДАЧИ/ПОДЗАДАЧИ", rTasks],
+    ["improve", "УЛУЧШИТЬ", improveModulesList],
     ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:selfimprove", "агенту самоулучшения…")],
   ], "overview");
 }
@@ -290,10 +422,23 @@ function render2D() {
   });
   const byCl = {}; modules.forEach((m) => { (byCl[m.cluster] = byCl[m.cluster] || []).push(m); });
   (byCl.C4 = byCl.C4 || []).unshift({ name: "selfimprove", display_name: "Самоулучшение", status: "busy" });
+  (byCl.C4 = byCl.C4 || []).unshift({ name: "intake", display_name: "Разбор входящего", status: "idle" });
+  (byCl.C4 = byCl.C4 || []).unshift({ name: "factory", display_name: "Фабрика модулей", status: "busy" });
   const pos = {};
   cnames.forEach((cid, i) => { const a = -Math.PI / 2 + i * (2 * Math.PI / n); pos[cid] = { x: cx + 200 * Math.cos(a), y: cy + 200 * Math.sin(a), a }; });
   s2nodes = {}; s2corePos = { x: cx, y: cy };
   const parts = []; let active = 0, total = 0;
+  // Pip-Boy map backdrop: grid graticule + concentric rings (visual; pans/zooms with content)
+  parts.push('<defs>'
+    + '<pattern id="g1" width="38" height="38" patternUnits="userSpaceOnUse"><path d="M38 0 L0 0 0 38" fill="none" stroke="currentColor" stroke-width="0.5" opacity="0.09"/></pattern>'
+    + '<pattern id="g2" width="190" height="190" patternUnits="userSpaceOnUse"><path d="M190 0 L0 0 0 190" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.16"/></pattern>'
+    + '</defs>'
+    + '<rect x="-3000" y="-3000" width="6000" height="6000" fill="url(#g1)"/>'
+    + '<rect x="-3000" y="-3000" width="6000" height="6000" fill="url(#g2)"/>'
+    + '<g opacity="0.14" stroke="currentColor" fill="none">'
+    + [120, 230, 340, 470].map((r) => `<circle cx="500" cy="320" r="${r}" stroke-width="0.7"/>`).join('')
+    + '<line x1="-3000" y1="320" x2="3000" y2="320" stroke-width="0.5"/><line x1="500" y1="-3000" x2="500" y2="3000" stroke-width="0.5"/>'
+    + '</g>');
   cnames.forEach((cid) => {
     if (s2hidden.has(cid)) return;
     const p = pos[cid];
@@ -471,7 +616,7 @@ function openIdeaInspector(i) {
   ], "info");
 }
 $("#genidea").onclick = async () => { $("#genidea").textContent = "…"; try { await api("/api/ideas/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ n: 2 }) }); await loadIdeas(); } catch (e) {} $("#genidea").textContent = "+ СГЕНЕРИРОВАТЬ"; };
-async function intake(source, value) { if (!value.trim()) return; try { await api("/api/ideas/intake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, value }) }); toast("Принято в разбор"); await loadIdeas(); } catch (e) { toast("Не удалось принять"); } }
+async function intake(source, value) { if (!value.trim()) return; toast("Разбираю…"); try { const r = await api("/api/ideas/intake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, value }) }); toast("Разбор: " + (r.category || "?") + (r.routed ? " → самоулучшение" : "")); await loadIdeas(); } catch (e) { toast("Не удалось разобрать"); } }
 async function adoptRepo(repo) {
   if (!repo.trim()) return; toast("Разбираю репозиторий…");
   try {

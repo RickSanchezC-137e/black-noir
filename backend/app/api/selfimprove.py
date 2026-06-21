@@ -136,6 +136,78 @@ async def improve_promote(body: ImpPromoteIn):
     return await realimprove.owner_promote(body.token)
 
 
+class ReworkIn(BaseModel):
+    prompt: str = ""
+
+
+@router.get("/hypothesis/{hid}")
+async def hypothesis_detail(hid: str):
+    """Full hypothesis + its experiment + verdict (analysis trace, reason)."""
+    import json as _j
+    import aiosqlite
+    from app.config import settings
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        h = await (await db.execute("SELECT * FROM si_hypotheses WHERE id=?", (hid,))).fetchone()
+        if not h:
+            from fastapi import HTTPException
+            raise HTTPException(404, "hypothesis not found")
+        h = dict(h)
+        exp = None
+        cur = await db.execute("SELECT * FROM si_experiments WHERE hypothesis_id=? ORDER BY started_at DESC LIMIT 1", (hid,))
+        r = await cur.fetchone()
+        if r:
+            exp = dict(r)
+            for k in ("constitution", "eval"):
+                try: exp[k] = _j.loads(exp[k]) if exp.get(k) else exp.get(k)
+                except Exception: pass
+        vrd = None
+        if exp:
+            r = await (await db.execute("SELECT * FROM si_verdicts WHERE experiment_id=? LIMIT 1", (exp["id"],))).fetchone()
+            if r:
+                vrd = dict(r)
+                for k in ("governor", "quality_gate"):
+                    try: vrd[k] = _j.loads(vrd[k]) if vrd.get(k) else vrd.get(k)
+                    except Exception: pass
+    return {"hypothesis": h, "experiment": exp, "verdict": vrd}
+
+
+@router.post("/hypothesis/{hid}/rework")
+async def hypothesis_rework(hid: str, body: ReworkIn):
+    """Return a rejected hypothesis to the queue with an attached refinement prompt."""
+    import aiosqlite
+    from app.config import settings
+    note = ("\n[доработка]: " + body.prompt) if body.prompt else "\n[доработка]"
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        cur = await db.execute(
+            "UPDATE si_hypotheses SET status='queued', archived_reason=NULL, experiment_id=NULL,"
+            " verdict_id=NULL, intent=intent||?, summary=summary||? WHERE id=?", (note, note, hid))
+        await db.commit()
+        if cur.rowcount == 0:
+            from fastapi import HTTPException
+            raise HTTPException(404, "hypothesis not found")
+    return {"ok": True, "id": hid, "status": "queued"}
+
+
+@router.get("/experiment/{eid}")
+async def experiment_detail(eid: str):
+    import json as _j
+    import aiosqlite
+    from app.config import settings
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        e = await (await db.execute("SELECT * FROM si_experiments WHERE id=?", (eid,))).fetchone()
+        if not e:
+            from fastapi import HTTPException
+            raise HTTPException(404, "experiment not found")
+        e = dict(e)
+        for k in ("constitution", "eval"):
+            try: e[k] = _j.loads(e[k]) if e.get(k) else e.get(k)
+            except Exception: pass
+        v = await (await db.execute("SELECT * FROM si_verdicts WHERE experiment_id=? LIMIT 1", (eid,))).fetchone()
+    return {"experiment": e, "verdict": dict(v) if v else None}
+
+
 @router.post("/rollback")
 async def rollback(body: RollbackIn):
     return await selfimprove.rollback(body.token)
