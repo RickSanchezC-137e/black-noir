@@ -84,7 +84,7 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 /* chat */
 #chatlog{position:absolute;top:38px;left:14px;right:14px;bottom:52px;overflow:auto;border:1px solid rgba(127,127,127,.55);border-radius:6px;padding:10px;font-size:12px}
 .msg{margin:5px 0}.msg.me{color:currentColor;opacity:.85}.msg.ai{opacity:1}.msg.sys{opacity:.5}
-#chatin{position:absolute;left:14px;right:14px;bottom:12px;display:flex;gap:6px}
+#chatin{position:absolute;left:110px;right:14px;bottom:12px;display:flex;gap:6px}
 #chatin input{flex:1;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:7px;border-radius:4px}
 /* systems */
 .syswrap{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px}
@@ -127,14 +127,14 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 .chsw{position:absolute;top:34px;left:14px;right:14px;height:26px;display:flex;gap:6px;z-index:3}
 .chtab{background:transparent;border:1px solid currentColor;color:currentColor;font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:3px 10px;border-radius:3px;cursor:pointer;opacity:.5}
 .chtab.on{opacity:1;text-shadow:0 0 6px currentColor}
-.cdraft{position:absolute;left:14px;right:120px;bottom:72px;display:none;flex-wrap:wrap;gap:5px;z-index:2}
+.cdraft{position:absolute;left:110px;right:120px;bottom:72px;display:none;flex-wrap:wrap;gap:5px;z-index:2}
 #chatlog{top:104px}
 .voicebar{position:absolute;top:64px;left:14px;right:14px;height:34px;display:flex;align-items:center;gap:8px;border:1px solid rgba(127,127,127,.55);border-radius:6px;padding:0 8px}
 .voicebar .mic{border:1px solid currentColor;background:transparent;color:currentColor;font-family:var(--mono);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px}
 .voicebar .mic.rec{background:#ff7a6b;color:#02100a;border-color:#ff7a6b}
 .voicebar canvas{flex:1;height:24px;display:block}
 .voicebar .vlbl{font-size:10px;opacity:.6;white-space:nowrap}
-.atts{position:absolute;left:14px;right:120px;bottom:46px;display:flex;flex-wrap:wrap;gap:5px;z-index:2}
+.atts{position:absolute;left:110px;right:120px;bottom:46px;display:flex;flex-wrap:wrap;gap:5px;z-index:2}
 .att{display:flex;align-items:center;gap:5px;border:1px solid currentColor;border-radius:4px;padding:1px 6px;font-size:10px;opacity:.9}
 .att b{font-weight:400}.att .rm{cursor:pointer;opacity:.7}
 .dropmask{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);border:2px dashed currentColor;font-size:13px;letter-spacing:1px}
