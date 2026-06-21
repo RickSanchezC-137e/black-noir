@@ -380,17 +380,42 @@ async function adoptRepo(repo) {
   if (!repo.trim()) return; toast("Разбираю репозиторий…");
   try {
     const r = await api("/api/ideas/adopt", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repo, cluster: "C6" }) });
-    const lic = r.license || {}, secSafe = !r.security || r.security.safe !== false;
-    drawer("РАЗБОР РЕПО"); inspTabs.innerHTML = "";
-    inspBody.innerHTML = `<div style="margin-bottom:8px">${esc(r.repo || repo)}</div>`
-      + `<div class="row"><span>вердикт</span><span class="chip">${esc(r.verdict)}</span></div>`
-      + `<div class="row"><span>лицензия</span><span>${esc(lic.license || "?")} ${lic.compatible ? "✓" : "✗"}</span></div>`
-      + `<div class="row"><span>безопасность</span><span>${secSafe ? "чисто" : "найдены риски"}</span></div>`
-      + (r.module_id ? `<div class="row"><span>модуль</span><span class="chip">${esc(r.module_id)}</span></div>` : "")
-      + (r.reason ? `<div class="m" style="margin-top:6px">${esc(r.reason)}</div>` : "")
-      + (r.overlaps && r.overlaps.length ? `<div class="m" style="margin-top:6px;opacity:.6">в кластере уже: ${esc(r.overlaps.join(", "))}</div>` : "");
-    toast("Репо: " + r.verdict);
+    renderRepo(r, repo);
   } catch (e) { toast("Не удалось разобрать репо"); }
+}
+function renderRepo(r, repo) {
+  const lic = r.license || {}, secSafe = !r.security || r.security.safe !== false;
+  drawer("РАЗБОР РЕПО"); inspTabs.innerHTML = "";
+  inspBody.innerHTML = `<div style="margin-bottom:8px">${esc(r.repo || repo)}</div>`
+    + `<div class="row"><span>вердикт</span><span class="chip">${esc(r.verdict)}</span></div>`
+    + `<div class="row"><span>лицензия</span><span>${esc(lic.license || "?")} ${lic.compatible ? "✓" : "✗"}</span></div>`
+    + `<div class="row"><span>безопасность</span><span>${secSafe ? "чисто" : "найдены риски"}</span></div>`
+    + (r.eval ? `<div class="row"><span>контракт</span><span>${r.eval.contract_ok ? "✓" : "✗"}</span></div>` : "")
+    + (r.module_id ? `<div class="row"><span>модуль</span><span class="chip">${esc(r.module_id)}</span></div>` : "")
+    + (r.reason ? `<div class="m" style="margin-top:6px">${esc(r.reason)}</div>` : "")
+    + (r.overlaps && r.overlaps.length ? `<div class="m" style="margin-top:6px;opacity:.6">в кластере уже: ${esc(r.overlaps.join(", "))}</div>` : "")
+    + `<div id="repoact" style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"></div>`;
+  const act = $("#repoact");
+  if (r.verdict === "defer" && secSafe && lic.compatible) {
+    const b = el("button", "ico", "СОБРАТЬ ОБЁРТКУ (Builder)"); b.onclick = () => buildWrapper(r.repo || repo); act.appendChild(b);
+  }
+  if (r.verdict === "ready" && r.token) {
+    const b = el("button", "ico", "ВНЕДРИТЬ (подтвердить)"); b.onclick = () => promoteWrapper(r.token); act.appendChild(b);
+    if (r.diff_stat) inspBody.innerHTML += `<div class="m" style="margin-top:6px;opacity:.7;white-space:pre-wrap">${esc(r.diff_stat)}</div>`;
+  }
+  toast("Репо: " + r.verdict);
+}
+async function buildWrapper(repo) {
+  toast("Собираю MCP-обёртку (Builder) — это займёт минуты…");
+  $("#repoact") && ($("#repoact").innerHTML = "<span class='vlbl'>Builder работает…</span>");
+  try { const r = await api("/api/ideas/adopt/build", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repo, cluster: "C6" }) }); renderRepo(r, repo); }
+  catch (e) { toast("Сборка обёртки не удалась"); }
+}
+async function promoteWrapper(token) {
+  toast("Внедряю обёртку…");
+  try { const r = await api("/api/ideas/adopt/promote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }) });
+    toast(r.ok ? "Модуль внедрён, ядро перезапускается" : ("Отказ: " + (r.reason || ""))); if (r.ok) { insp.classList.remove("open"); setTimeout(loadModules, 4000); } }
+  catch (e) { toast("Внедрение не удалось"); }
 }
 $("#iadd").onclick = () => { const src = $("#isrc").value, val = $("#ival").value; $("#ival").value = ""; if (src === "repo") adoptRepo(val); else intake(src, val); };
 $("#ival").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#iadd").click(); });

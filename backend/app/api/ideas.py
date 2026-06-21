@@ -111,6 +111,30 @@ async def adopt_repo(body: AdoptIn):
     return rep
 
 
+class WrapIn(BaseModel):
+    repo: str
+    capability: str = ""
+    cluster: str = "C6"
+
+
+class PromoteIn(BaseModel):
+    token: str
+
+
+@router.post("/adopt/build")
+async def adopt_build(body: WrapIn):
+    """Builder writes an MCP wrapper for the repo (eval-gated, owner promotes)."""
+    from app.core import adoption
+    return await adoption.build_wrapper(body.repo, capability=body.capability, cluster=body.cluster)
+
+
+@router.post("/adopt/promote")
+async def adopt_promote(body: PromoteIn):
+    """Owner-confirmed: apply the built wrapper to the live core."""
+    from app.core import adoption
+    return await adoption.promote_wrapper(body.token)
+
+
 @router.get("/bot")
 async def bot_status():
     """Live Telegram bot identity (getMe) — proves the escalation channel is wired."""

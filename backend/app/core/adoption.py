@@ -188,3 +188,108 @@ def list_adoptions() -> list[dict]:
             rows = []
     con.close()
     return rows
+
+
+# ---------------- generic Builder-written wrapper (any repo → MCP module) ----------------
+WRAP_DIR = REPO / ".worktrees"
+
+
+def _wrapper_instruction(repo: str, module_id: str, cluster: str, capability: str, readme: str) -> str:
+    return (
+        f"Создай НОВЫЙ MCP-модуль-обёртку '{module_id}' (кластер {cluster}) для GitHub-репозитория "
+        f"'{repo}'. Возможность: {capability or 'определи по README'}.\n"
+        f"СОЗДАЙ ТОЛЬКО файлы внутри modules/installed/{module_id}/ — НИЧЕГО за пределами этого каталога "
+        f"не трогай (особенно app/core, governor, конституцию).\n"
+        f"Файлы:\n"
+        f"  handler.py: 'async def call(tool: str, args: dict) -> dict' (неизвестный tool → ValueError) и "
+        f"'async def health() -> dict'. Зависимости ставь лениво внутри функций (import внутри).\n"
+        f"  module.yaml: manifest_version:1, module_id:{module_id}, cluster:{cluster}, "
+        f"namespace:m_{module_id}__, version:1.0.0, runtime:in-process, секция tools с action_class из "
+        f"read/local_write/external_send, и capabilities.origin='github.com/{repo}', license.\n"
+        f"  test_contract.py: герметичный (без сети) — импортирует handler и проверяет, что неизвестный tool "
+        f"отклоняется; печатает '{module_id} contract OK'.\n"
+        f"Эталон контракта смотри в modules/installed/mcp_glances/.\n"
+        f"README репозитория (фрагмент):\n{readme}"
+    )
+
+
+async def build_wrapper(repo: str, *, capability: str = "", cluster: str = "C6") -> dict:
+    """Builder (headless Claude Code) writes an MCP wrapper for `repo` in a sandbox,
+    eval-gates it, and stashes the diff for owner-confirmed promotion. Never touches live."""
+    import asyncio
+
+    from app.core import builder
+    repo = repo.replace("https://github.com/", "").replace(".git", "").strip("/")
+    name = re.sub(r"[^a-z0-9_]", "_", repo.split("/")[-1].lower())
+    module_id = f"mcp_{name}"
+    rep: dict = {"repo": repo, "module_id": module_id, "capability": capability, "cluster": cluster}
+    try:
+        d = clone(repo)
+        lic = license_scan(d)
+        sec = security_scan(d)
+        rep.update(license=lic, security=sec)
+        if not lic["compatible"]:
+            rep.update(verdict="skip", reason=f"license {lic['license']} incompatible"); return rep
+        if not sec["safe"]:
+            rep.update(verdict="skip", reason=f"security findings: {sec['findings'][:3]}"); return rep
+        readme = ""
+        for n in ("README.md", "README.rst", "readme.md", "Readme.md"):
+            if (d / n).exists():
+                readme = (d / n).read_text(errors="ignore")[:2500]; break
+        instr = _wrapper_instruction(repo, module_id, cluster, capability, readme)
+        b = await asyncio.to_thread(builder.build, instr, timeout=600)
+        wt = Path(b["worktree"])
+        rep["builder"] = {"ok": b.get("ok"), "tokens": b.get("tokens"), "summary": (b.get("summary") or "")[:300]}
+        try:
+            rel = f"modules/installed/{module_id}"
+            subprocess.run(["git", "add", "-A", rel], cwd=str(wt), capture_output=True, timeout=60)
+            diff = subprocess.run(["git", "diff", "--cached", "--", rel], cwd=str(wt),
+                                  capture_output=True, text=True, timeout=60).stdout
+            modp = wt / rel
+            if not diff.strip() or not modp.exists():
+                rep.update(verdict="failed", reason="Builder не создал модуль"); return rep
+            # hard guard: wrapper may ONLY add files under its own module dir
+            touched = re.findall(r"^\+\+\+ b/(.+)$", diff, re.M)
+            outside = [f for f in touched if f != "/dev/null" and not f.startswith(rel + "/")]
+            if outside:
+                rep.update(verdict="rejected", reason=f"diff трогает файлы вне модуля: {outside[:3]}"); return rep
+            import factory
+            ok, out = factory.contract_test(modp)
+            rep["eval"] = {"contract_ok": ok, "detail": out[-300:]}
+            if not ok:
+                rep.update(verdict="failed", reason="контракт-тест красный"); return rep
+            token = "wrap_" + datetime.now(timezone.utc).strftime("%H%M%S") + name[:6]
+            WRAP_DIR.mkdir(exist_ok=True)
+            (WRAP_DIR / f"{token}.patch").write_text(diff)
+            rep.update(verdict="ready", token=token, diff_stat=b.get("diff_stat", ""),
+                       reason="обёртка собрана и прошла контракт — подтвердите внедрение")
+        finally:
+            try:
+                builder.drop_worktree(wt)
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception as e:  # noqa: BLE001
+        rep.update(verdict="skip", reason=f"error: {e}")
+    finally:
+        if (SANDBOX / repo.split("/")[-1]).exists():
+            shutil.rmtree(SANDBOX / repo.split("/")[-1], ignore_errors=True)
+    _record(rep)
+    return rep
+
+
+async def promote_wrapper(token: str) -> dict:
+    """Owner-confirmed: apply a stashed wrapper diff to the live tree and restart to register."""
+    patch = WRAP_DIR / f"{token}.patch"
+    if not patch.exists():
+        return {"ok": False, "reason": "неизвестный токен"}
+    action = Action(module="adoption", tool="promote_wrapper", action_class="self_modify")
+    dec = governor.authorize(action)
+    if dec.decision == "KILL":
+        await audit(action, dec, ok=False); return {"ok": False, "reason": dec.reason}
+    apply = subprocess.run(["git", "apply", str(patch)], cwd=str(REPO), capture_output=True, text=True)
+    if apply.returncode != 0:
+        await audit(action, dec, ok=False)
+        return {"ok": False, "reason": f"git apply failed: {apply.stderr[:200]}"}
+    await audit(action, dec, ok=True)
+    subprocess.run(["sudo", "systemctl", "restart", "noir-core.service"], capture_output=True, timeout=60)
+    return {"ok": True, "applied": True, "note": "ядро перезапущено — модуль регистрируется"}
