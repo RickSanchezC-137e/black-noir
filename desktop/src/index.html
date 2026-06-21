@@ -42,7 +42,7 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 /* 2D schema — same core→cluster→module links as 3D, live, animated flow */
 .schema2d{position:absolute;inset:0;z-index:6;pointer-events:none}
 .schema2d.hidden{display:none}
-.s2bar{position:absolute;top:42px;left:150px;right:12px;z-index:7;display:flex;gap:6px;align-items:center;font-size:11px;pointer-events:auto}
+.s2bar{position:absolute;top:42px;left:auto;right:12px;z-index:7;display:flex;gap:6px;align-items:center;font-size:11px;pointer-events:auto;max-width:calc(100% - 230px)}
 .s2bar input{background:rgba(0,0,0,.5);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:4px 8px;border-radius:3px;width:150px}
 .s2chips{display:flex;gap:4px;flex-wrap:wrap}
 .s2chip{border:1px solid currentColor;border-radius:3px;padding:2px 6px;cursor:pointer;opacity:.4;white-space:nowrap}
@@ -106,9 +106,13 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 .vbport .nm{text-align:center;font-size:10px;opacity:.85}
 .vbub{border:1px solid currentColor;background:rgba(0,0,0,.8);border-radius:6px;padding:8px 10px;font-size:11px;max-width:230px}
 .ft{display:flex;justify-content:space-between;padding:5px 12px;border-top:1px solid currentColor;font-size:11px;opacity:.7}
-/* chat: voice bar + equalizer + attachments + visual face window */
-#chatlog{top:78px}
-.voicebar{position:absolute;top:36px;left:14px;right:14px;height:34px;display:flex;align-items:center;gap:8px;border:1px solid rgba(127,127,127,.35);border-radius:6px;padding:0 8px}
+/* chat: channel switcher + voice bar + equalizer + attachments + visual face */
+.chsw{position:absolute;top:34px;left:14px;right:14px;height:26px;display:flex;gap:6px;z-index:3}
+.chtab{background:transparent;border:1px solid currentColor;color:currentColor;font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:3px 10px;border-radius:3px;cursor:pointer;opacity:.5}
+.chtab.on{opacity:1;text-shadow:0 0 6px currentColor}
+.cdraft{position:absolute;left:14px;right:120px;bottom:72px;display:none;flex-wrap:wrap;gap:5px;z-index:2}
+#chatlog{top:104px}
+.voicebar{position:absolute;top:64px;left:14px;right:14px;height:34px;display:flex;align-items:center;gap:8px;border:1px solid rgba(127,127,127,.35);border-radius:6px;padding:0 8px}
 .voicebar .mic{border:1px solid currentColor;background:transparent;color:currentColor;font-family:var(--mono);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px}
 .voicebar .mic.rec{background:#ff7a6b;color:#02100a;border-color:#ff7a6b}
 .voicebar canvas{flex:1;height:24px;display:block}
@@ -180,8 +184,10 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
     <div class="pane hidden" data-tab="tasks"><div class="ttl gl">ЗАДАЧИ</div><div class="kb" id="tasks"></div></div>
 
     <div class="pane hidden" data-tab="chat"><div class="ttl gl">ЧАТ · МОДУЛЬ ВЗАИМОДЕЙСТВИЯ <button class="ico" id="visual">◉ ВИЗУАЛ</button></div>
+      <div class="chsw"><button class="chtab on" data-ch="mediator">ПЕРЕДАТЧИК</button><button class="chtab" data-ch="core">ЯДРО</button><button class="chtab" data-ch="claude_code">CLAUDE CODE</button></div>
       <div class="voicebar"><button class="mic" id="mic" title="голос — нажмите, чтобы говорить">●</button><canvas id="eq"></canvas><span class="vlbl" id="vlbl">голос: ожидание</span></div>
       <div id="chatlog"></div>
+      <div class="cdraft" id="cdraft"></div>
       <div class="atts" id="atts"></div>
       <div id="chatin"><button class="ico" id="attbtn" title="вложение (+ / Ctrl+V / перетаскивание)">+</button><input id="msg" placeholder="сообщение ядру…  (Ctrl+V — вставка, перетащите файл)" autocomplete="off"/><button class="ico" id="send">→</button></div>
       <input type="file" id="fileinp" multiple style="display:none"/>

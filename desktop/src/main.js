@@ -435,7 +435,7 @@ async function loadProfile() {
 // ====================================================================
 //  CHAT — voice equalizer + ws stream + attachments + visual face
 // ====================================================================
-let sid = null, atts = [], chatWS = null;
+let atts = [];
 function renderAtts() {
   const wrap = $("#atts"); wrap.innerHTML = "";
   atts.forEach((a, idx) => { const c = el("div", "att", `<b>${esc(a.name)}</b><span class="rm" data-i="${idx}">✕</span>`); c.querySelector(".rm").onclick = () => { atts.splice(idx, 1); renderAtts(); }; wrap.appendChild(c); });
@@ -451,31 +451,68 @@ $("#msg").addEventListener("paste", (e) => { const items = e.clipboardData?.item
   pane.addEventListener("drop", (e) => { e.preventDefault(); depth = 0; mask.classList.remove("on"); for (const f of e.dataTransfer.files) addAtt(f.name, f.type); });
 })();
 
+// Channels (06_desktop.md §6.3): Передатчик / Ядро / Claude Code — each with
+// persistent per-channel history + session, kept in localStorage.
+const CHANNELS = { mediator: "ПЕРЕДАТЧИК", core: "ЯДРО", claude_code: "CLAUDE CODE" };
+let ch = localStorage.getItem("noir.ch") || "mediator";
+let drafts = [];
+const chKey = (c) => "noir.chat." + c;
+const chGet = (c) => { try { return JSON.parse(localStorage.getItem(chKey(c))) || {}; } catch (e) { return {}; } };
+const chSet = (c, s) => localStorage.setItem(chKey(c), JSON.stringify(s));
+function pushHist(c, role, text) { const s = chGet(c); s.hist = (s.hist || []).concat([{ role, text }]).slice(-120); chSet(c, s); }
+
 function appendMsg(cls, text) { const e = el("div", "msg " + cls, esc(text)); $("#chatlog").appendChild(e); $("#chatlog").scrollTop = 1e9; return e; }
+function renderChat() {
+  const log = $("#chatlog"); log.innerHTML = "";
+  (chGet(ch).hist || []).forEach((m) => appendMsg(m.role, m.text));
+  if (!log.children.length) appendMsg("sys", ch === "mediator"
+    ? "Передатчик: соберу твои реплики в одну задачу ядру и верну суть кратко."
+    : ch === "claude_code" ? "Чат с Claude Code (read-only)." : "Прямой чат с ядром.");
+}
+function renderDrafts() {
+  const d = $("#cdraft"); d.innerHTML = "";
+  drafts.forEach((t, i) => { const c = el("span", "att", `<b>${esc(t.slice(0, 44))}</b><span class="rm" data-i="${i}">✕</span>`); c.querySelector(".rm").onclick = () => { drafts.splice(i, 1); renderDrafts(); }; d.appendChild(c); });
+  d.style.display = (ch === "mediator" && drafts.length) ? "flex" : "none";
+}
+function switchChannel(c) {
+  ch = c; localStorage.setItem("noir.ch", c); drafts = [];
+  document.querySelectorAll(".chtab").forEach((b) => b.classList.toggle("on", b.dataset.ch === c));
+  $("#msg").placeholder = c === "mediator" ? "реплика… (Enter — в буфер, кнопка — собрать и отправить ядру)"
+    : c === "claude_code" ? "вопрос Claude Code…" : "сообщение ядру…";
+  $("#send").textContent = c === "mediator" ? "⮞" : "→";
+  renderDrafts(); renderChat();
+}
+document.querySelectorAll(".chtab").forEach((b) => b.onclick = () => switchChannel(b.dataset.ch));
+
 async function sendChat() {
-  const i = $("#msg"); let text = i.value.trim();
-  if (!text && !atts.length) return;
+  const i = $("#msg"), cur = i.value.trim();
+  let text;
+  if (ch === "mediator") {
+    if (cur) { drafts.push(cur); i.value = ""; }
+    if (!drafts.length && !atts.length) return;
+    text = drafts.join("\n");
+  } else { text = cur; if (!text && !atts.length) return; i.value = ""; }
   if (atts.length) text += (text ? "\n" : "") + "[вложения: " + atts.map((a) => a.name).join(", ") + "]";
-  i.value = ""; atts = []; renderAtts();
-  appendMsg("me", "» " + text);
-  const bubble = appendMsg("ai", "…"); let acc = "";
-  // live token stream via /ws/chat (CANON §3); fallback to POST /api/chat
+  drafts = []; renderDrafts(); atts = []; renderAtts();
+  appendMsg("me", "» " + text); pushHist(ch, "me", "» " + text);
+  const bubble = appendMsg("ai", "…");
+  const st = chGet(ch);
   try {
-    await new Promise((resolve, reject) => {
-      const ws = new WebSocket(WS + "/ws/chat"); let done = false;
-      const to = setTimeout(() => { if (!done) { ws.close(); reject(new Error("ws timeout")); } }, 6000);
-      ws.onopen = () => ws.send(JSON.stringify({ message: text }));
-      ws.onmessage = (ev) => { const d = JSON.parse(ev.data); if (d.type === "token") { acc += d.data; bubble.textContent = acc; $("#chatlog").scrollTop = 1e9; faceSpeak(0.6); } else if (d.type === "done") { done = true; clearTimeout(to); ws.close(); resolve(); } else if (d.type === "error") { done = true; clearTimeout(to); ws.close(); reject(new Error(d.data)); } };
-      ws.onerror = () => { if (!done) { clearTimeout(to); reject(new Error("ws error")); } };
-    });
-    if (!acc) bubble.textContent = "(пустой ответ)";
-  } catch (e) {
-    try { const r = await api("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: text, session_id: sid }) }); sid = r.session_id; bubble.textContent = pickReply(r); }
-    catch (e2) { bubble.textContent = "[нет связи с ядром]"; bubble.className = "msg sys"; }
-  }
+    const r = await api("/api/chat", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: text, agent: ch, session_id: st.sid || null, cc_session: st.cc || null }) });
+    st.sid = r.session_id; if (r.cc_session) st.cc = r.cc_session; chSet(ch, st);
+    if (ch === "mediator" && r.task) { appendMsg("sys", "→ ядру: " + r.task); pushHist(ch, "sys", "→ ядру: " + r.task); }
+    bubble.textContent = pickReply(r) || "(пустой ответ)"; pushHist(ch, "ai", bubble.textContent); faceSpeak(0.7);
+  } catch (e) { bubble.textContent = "[нет связи с ядром]"; bubble.className = "msg sys"; }
   $("#chatlog").scrollTop = 1e9;
 }
-$("#send").onclick = sendChat; $("#msg").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
+$("#send").onclick = sendChat;
+$("#msg").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  if (ch === "mediator") { const v = e.target.value.trim(); if (v) { drafts.push(v); e.target.value = ""; renderDrafts(); } }
+  else sendChat();
+});
+switchChannel(ch);
 
 // ---- voice equalizer (real mic audio, WebAudio AnalyserNode) ----
 let audioCtx, analyser, micStream, eqRAF, audioLevel = 0;
@@ -535,10 +572,15 @@ function buildFace() {
 $("#visual").onclick = () => { const w = $("#facewin"); w.classList.toggle("on"); if (w.classList.contains("on") && !faceScene) buildFace(); };
 $("#faceclose").onclick = () => $("#facewin").classList.remove("on");
 (function faceDrag() {
-  const w = $("#facewin"), h = $("#facehead"); let dx, dy, drag = false;
-  h.addEventListener("pointerdown", (e) => { drag = true; const r = w.getBoundingClientRect(); dx = e.clientX - r.left; dy = e.clientY - r.top; h.setPointerCapture(e.pointerId); });
-  h.addEventListener("pointermove", (e) => { if (!drag) return; w.style.right = "auto"; w.style.left = (e.clientX - dx) + "px"; w.style.top = (e.clientY - dy) + "px"; });
-  h.addEventListener("pointerup", () => { drag = false; });
+  const w = $("#facewin"), h = $("#facehead"); let sx, sy, sl, st, drag = false;
+  h.addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".x")) return;            // don't start a drag on the close button
+    drag = true; sx = e.clientX; sy = e.clientY; sl = w.offsetLeft; st = w.offsetTop;  // offsetParent-relative
+    w.style.right = "auto"; w.style.left = sl + "px"; w.style.top = st + "px";
+    h.setPointerCapture(e.pointerId);
+  });
+  h.addEventListener("pointermove", (e) => { if (!drag) return; w.style.left = (sl + e.clientX - sx) + "px"; w.style.top = (st + e.clientY - sy) + "px"; });
+  h.addEventListener("pointerup", (e) => { drag = false; try { h.releasePointerCapture(e.pointerId); } catch (_) {} });
 })();
 
 // ====================================================================

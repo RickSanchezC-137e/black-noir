@@ -35,6 +35,20 @@ async def chat(message: str, history: list[dict] | None = None) -> tuple[str, in
     return text, resp.usage.input_tokens, resp.usage.output_tokens
 
 
+async def chat_as(system: str, message: str, history: list[dict] | None = None) -> tuple[str, int, int]:
+    """Like chat() but with a custom system prompt (used by the Mediator agent, C1)."""
+    msgs = list(history or [])
+    msgs.append({"role": "user", "content": message})
+    resp = await client().messages.create(
+        model=settings.claude_model,
+        max_tokens=settings.llm_max_tokens,
+        system=system,
+        messages=msgs,
+    )
+    text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+    return text, resp.usage.input_tokens, resp.usage.output_tokens
+
+
 async def stream(message: str, history: list[dict] | None = None):
     """Async generator of text tokens for /ws/chat."""
     msgs = list(history or [])
