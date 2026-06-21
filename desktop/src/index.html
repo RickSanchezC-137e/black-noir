@@ -3,173 +3,163 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Noir HUD</title>
+<title>Black Noir</title>
 <style>
-/* Original retro-terminal aesthetic (CANON §8). NO protected assets. Theme via CSS vars. */
-:root[data-theme="green"]{ --bg:#04140a; --fg:#7dffb0; --dim:rgba(125,255,176,.55);
-  --accent:#39ff8c; --accent2:#9dffc6; --warn:#ffd24d; --err:#ff6b5a;
-  --line:rgba(57,255,140,.22); --glow:0 0 4px rgba(57,255,140,.7); }
-:root[data-theme="gold"]{ --bg:#0a0c04; --fg:#ffe9c0; --dim:rgba(255,225,170,.55);
-  --accent:#ffcc00; --accent2:#ffa500; --warn:#ffc24d; --err:#e0795a;
-  --line:rgba(255,165,0,.22); --glow:0 0 4px rgba(255,165,0,.7); }
+/* Pip-Boy CRT HUD — view per desktop_reference/hud_reference.html. Theme via #px[.gold]. */
+:root{--mono:"JetBrains Mono",Consolas,monospace}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 "Cascadia Mono",Consolas,monospace;
-  letter-spacing:.3px;text-shadow:var(--glow);height:100vh;overflow:hidden}
-#crt{position:fixed;inset:0;pointer-events:none;z-index:9;
-  background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
-#vig{position:fixed;inset:0;pointer-events:none;z-index:8;
-  background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.55))}
-.tb{height:34px;display:flex;align-items:center;gap:14px;padding:0 12px;border-bottom:1px solid var(--line)}
-.tb b{color:var(--accent)} .tb .sp{flex:1}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;background:var(--dim)}
-.dot.ok{background:var(--accent);box-shadow:var(--glow)} .dot.err{background:var(--err)}
-.dot.busy{background:var(--warn)}
-nav{display:flex;gap:4px} nav button,.toggle,button.act{background:transparent;color:var(--dim);
-  border:1px solid var(--line);font:inherit;padding:3px 9px;cursor:pointer;text-shadow:inherit}
-nav button.on,nav button:hover{color:var(--accent);border-color:var(--accent)}
-.toggle{color:var(--accent)}
-main{height:calc(100vh - 34px);overflow:auto;padding:14px}
-.screen{display:none} .screen.on{display:block}
-.box{border:1px solid var(--line);padding:10px 12px;margin:0 0 12px;position:relative}
-.box::before,.box::after{content:"";position:absolute;width:8px;height:8px;border:1px solid var(--accent)}
-.box::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
-.box::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
-h2{margin:.2em 0 .6em;color:var(--accent);font-size:13px;letter-spacing:2px}
-.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
-.col h3{margin:.2em 0;color:var(--accent2);font-size:11px;border-bottom:1px solid var(--line);padding-bottom:3px}
-.mod{border:1px solid var(--line);padding:5px 7px;margin:5px 0;font-size:12px}
-.mod small{color:var(--dim)}
-.kv{display:flex;justify-content:space-between;border-bottom:1px dotted var(--line);padding:2px 0}
-.kv b{color:var(--accent2)}
-.empty{color:var(--dim);font-style:italic;padding:8px}
-.row{display:flex;gap:10px;flex-wrap:wrap}
-.card{flex:1;min-width:150px}
-#chatlog{height:46vh;overflow:auto;border:1px solid var(--line);padding:8px;margin-bottom:8px}
-.msg{margin:4px 0} .msg.me{color:var(--accent2)} .msg.ai{color:var(--fg)} .msg.sys{color:var(--dim)}
-#chatin{display:flex;gap:6px} #chatin input{flex:1;background:#0000;border:1px solid var(--line);
-  color:var(--fg);font:inherit;padding:6px;text-shadow:inherit}
-.chip{display:inline-block;border:1px solid var(--line);padding:1px 6px;margin:2px;font-size:11px;color:var(--dim)}
-.chip.confirmed{color:var(--accent)} .chip.tested{color:var(--accent)} .chip.open{color:var(--warn)}
+html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
+#px{position:relative;height:100vh;display:flex;flex-direction:column;background:#02100a;color:#4dffa0;font-family:var(--mono);overflow:hidden}
+#px.gold{background:#0f0b02;color:#f5bd3a}
+.scan{position:absolute;inset:0;pointer-events:none;z-index:30;background:repeating-linear-gradient(rgba(0,0,0,0) 0 2px,rgba(0,0,0,.2) 2px 3px)}
+.vig{position:absolute;inset:0;pointer-events:none;z-index:30;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 60%,rgba(0,0,0,.5) 100%)}
+.gl{text-shadow:0 0 8px currentColor}
+.winbar{display:flex;align-items:center;height:30px;padding:0 8px;border-bottom:1px solid currentColor;font-size:11px;letter-spacing:1px}
+.winbar .wt{opacity:.7}
+.winbar .wbtns{margin-left:auto;display:flex;gap:6px}
+.winbar .wbtns button{width:26px;height:20px;background:transparent;border:1px solid currentColor;color:currentColor;border-radius:3px;cursor:pointer;font-family:var(--mono)}
+.winbar .wbtns .cl{color:#ff7a6b;border-color:#ff7a6b}
+.hd{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid currentColor;font-size:11px;letter-spacing:1px}
+.tabs{display:flex;gap:10px;flex:1}
+.tab{background:transparent;border:0;color:currentColor;font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:2px;cursor:pointer;opacity:.5}
+.tab.on{opacity:1;text-shadow:0 0 8px currentColor}
+.tab.on::before{content:"\2310";margin-right:5px}.tab.on::after{content:"\00AC";margin-left:5px}
+.ico{background:transparent;border:1px solid currentColor;color:currentColor;font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:3px;cursor:pointer}
+.screen{position:relative;flex:1;min-height:0}
+.pane{position:absolute;inset:0;padding:0;overflow:auto}
+.pane.hidden{display:none}
+.ttl{padding:8px 14px;font-size:12px;letter-spacing:2px}
+#map canvas{position:absolute;top:0;left:0}
+.labels{position:absolute;inset:0;pointer-events:none;z-index:5}
+.lab{position:absolute;transform:translate(-50%,-50%);font-size:11px;background:rgba(0,0,0,.5);padding:1px 5px;border-radius:3px;text-shadow:0 0 5px currentColor;white-space:nowrap;cursor:pointer;pointer-events:auto}
+.lab.cl{letter-spacing:1.5px}
+.lab.mod{opacity:.85;font-size:10px}
+.sub{position:absolute;top:42px;left:12px;z-index:6;display:flex;gap:4px}
+.sb{background:rgba(0,0,0,.5);border:1px solid currentColor;color:currentColor;font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:3px;cursor:pointer;opacity:.5}
+.sb.on{opacity:1}
+.hint{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:11px;opacity:.45;z-index:6;pointer-events:none}
+.cols{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:12px 14px;font-size:11px}
+.col h4{margin:0 0 8px;font-size:11px;letter-spacing:1px;opacity:.75}
+.mod{border:1px solid rgba(127,127,127,.4);border-radius:5px;padding:7px 9px;margin-bottom:7px;cursor:pointer}
+.mod b{font-weight:400}.mod .m{font-size:10px;opacity:.6;margin-top:3px}
+.dot{color:#4dffa0}.dot.err{color:#ff7a6b}.dot.idle{opacity:.6}.dot.busy{color:#ffd24d}
+.empty{opacity:.5;font-style:italic;padding:10px 14px;font-size:12px}
+/* kanban / cards */
+.kb{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:12px 14px;font-size:11px}
+.kbcol h4{margin:0 0 8px;opacity:.75;letter-spacing:1px}
+.tk{border:1px solid rgba(127,127,127,.4);border-radius:5px;padding:6px 8px;margin-bottom:6px}
+.idea{border:1px solid rgba(127,127,127,.4);border-radius:5px;padding:6px 9px;margin:0 14px 6px}
+/* chat */
+#chatlog{position:absolute;top:38px;left:14px;right:14px;bottom:52px;overflow:auto;border:1px solid rgba(127,127,127,.35);border-radius:6px;padding:10px;font-size:12px}
+.msg{margin:5px 0}.msg.me{color:currentColor;opacity:.85}.msg.ai{opacity:1}.msg.sys{opacity:.5}
+#chatin{position:absolute;left:14px;right:14px;bottom:12px;display:flex;gap:6px}
+#chatin input{flex:1;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:7px;border-radius:4px}
+/* systems */
+.syswrap{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px}
+.card{border:1px solid rgba(127,127,127,.35);border-radius:6px;padding:11px 13px}
+.card h5{margin:0 0 8px;font-size:11px;letter-spacing:1px}
+.row{display:flex;justify-content:space-between;font-size:12px;margin:3px 0;opacity:.9;gap:8px}
+.bar{height:5px;background:rgba(127,127,127,.25);border-radius:3px;overflow:hidden;margin:4px 0 8px}.bar>i{display:block;height:100%;background:currentColor}
+.prof{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px}
+.chip{display:inline-block;border:1px solid currentColor;border-radius:3px;padding:0 5px;font-size:10px;opacity:.85}
+/* inspector drawer */
+#insp{position:absolute;top:0;right:0;bottom:0;width:340px;background:rgba(0,8,4,.96);border-left:1px solid currentColor;z-index:22;transform:translateX(100%);transition:transform .18s;display:flex;flex-direction:column}
+#px.gold #insp{background:rgba(15,11,2,.96)}
+#insp.open{transform:none}
+#insp .ih{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid currentColor;font-size:12px}
+#insp .ih .x{margin-left:auto;cursor:pointer;border:1px solid currentColor;border-radius:3px;padding:0 7px}
+#insp .itabs{display:flex;gap:4px;padding:7px 10px;flex-wrap:wrap}
+#insp .it{font-size:10px;border:1px solid currentColor;border-radius:3px;padding:3px 7px;cursor:pointer;opacity:.55}
+#insp .it.on{opacity:1}
+#insp .ibody{flex:1;overflow:auto;padding:10px 11px;font-size:11px}
+.notifs{position:absolute;right:12px;bottom:12px;width:240px;z-index:25;display:flex;flex-direction:column;gap:8px}
+.toast{border:1px solid currentColor;border-left:3px solid currentColor;background:rgba(0,0,0,.9);border-radius:4px;padding:8px 10px;font-size:11px}
+.bell{position:relative;cursor:pointer}.bell .cnt{position:absolute;top:-7px;right:-9px;font-size:9px;background:currentColor;color:#02100a;border-radius:8px;padding:0 4px}
+.vbro{position:absolute;left:13px;bottom:13px;z-index:20;display:flex;align-items:flex-end;gap:8px}
+.vbport{border:1px solid currentColor;background:rgba(0,0,0,.6);border-radius:4px;padding:4px 7px 2px}
+.vbport .nm{text-align:center;font-size:10px;opacity:.85}
+.vbub{border:1px solid currentColor;background:rgba(0,0,0,.8);border-radius:6px;padding:8px 10px;font-size:11px;max-width:230px}
+.ft{display:flex;justify-content:space-between;padding:5px 12px;border-top:1px solid currentColor;font-size:11px;opacity:.7}
 </style>
 </head>
 <body>
-<div id="crt"></div><div id="vig"></div>
-<div class="tb">
-  <b id="brand">NOIR</b>
-  <span><i class="dot" id="conn"></i><span id="connlbl" class="dim">connecting…</span></span>
-  <nav id="nav"></nav>
-  <span class="sp"></span>
-  <span id="clock" class="dim"></span>
-  <button class="toggle" id="theme">◐ GREEN/GOLD</button>
+<div id="px">
+  <div class="scan"></div><div class="vig"></div>
+
+  <div class="winbar" data-tauri-drag-region>
+    <span class="wt gl">BLACK NOIR</span>
+    <span class="wt" id="ver" style="margin-left:10px;opacity:.5"></span>
+    <div class="wbtns">
+      <button id="w-min" title="свернуть">&#8211;</button>
+      <button id="w-max" title="развернуть">&#9633;</button>
+      <button id="w-close" class="cl" title="закрыть">&#10005;</button>
+    </div>
+  </div>
+
+  <div class="hd">
+    <span class="gl" id="brand" style="letter-spacing:2px">BLACK NOIR</span>
+    <span id="conn" style="opacity:.7">&#9679; connecting…</span>
+    <div class="tabs">
+      <button class="tab on" data-go="map">КАРТА</button>
+      <button class="tab" data-go="tasks">ЗАДАЧИ</button>
+      <button class="tab" data-go="chat">ЧАТ</button>
+      <button class="tab" data-go="sys">СИСТЕМЫ</button>
+      <button class="tab" data-go="ideas">ИДЕИ</button>
+      <button class="tab" data-go="prof">ПРОФИЛЬ</button>
+    </div>
+    <span class="ico bell" id="bell">&#128276;<span class="cnt hidden" id="bellcnt">0</span></span>
+    <button class="ico" id="theme">&#9680; GREEN/GOLD</button>
+  </div>
+
+  <div class="screen" id="screen">
+    <div class="pane" data-tab="map" id="map">
+      <div class="ttl gl">КАРТА · ОБЛАКО ЯДРА</div>
+      <div class="sub"><button class="sb on" id="sb3d">3D ОБЛАКО</button><button class="sb" id="sb2d">2D СХЕМА</button></div>
+      <div class="labels" id="labels"></div>
+      <div class="cols hidden" id="schema2d"></div>
+      <div class="hint">тащи — вращать · колесо — приближать · клик по ядру — состав ИИ · по модулю — инспектор</div>
+    </div>
+
+    <div class="pane hidden" data-tab="tasks"><div class="ttl gl">ЗАДАЧИ</div><div class="kb" id="tasks"></div></div>
+
+    <div class="pane hidden" data-tab="chat"><div class="ttl gl">ЧАТ · МОДУЛЬ ВЗАИМОДЕЙСТВИЯ</div>
+      <div id="chatlog"></div>
+      <div id="chatin"><input id="msg" placeholder="сообщение ядру…" autocomplete="off"/><button class="ico" id="send">→</button></div>
+    </div>
+
+    <div class="pane hidden" data-tab="sys"><div class="ttl gl">СИСТЕМЫ · ЖЕЛЕЗО (live)</div>
+      <div class="syswrap"><div class="card" id="metrics"><div class="empty">—</div></div><div class="card" id="hw"><div class="empty">—</div></div></div>
+      <div style="padding:0 14px"><div class="card" id="gov"><h5>GOVERNOR · АУДИТ</h5><div class="empty">—</div></div></div>
+    </div>
+
+    <div class="pane hidden" data-tab="ideas"><div class="ttl gl">ИДЕИ <button class="ico" id="genidea">+ СГЕНЕРИРОВАТЬ</button></div><div id="ideas"></div></div>
+
+    <div class="pane hidden" data-tab="prof"><div class="ttl gl">ПРОФИЛЬ ВЛАДЕЛЬЦА</div><div class="prof" id="prof"></div></div>
+
+    <!-- inspector drawer (module / core) -->
+    <div id="insp">
+      <div class="ih"><span id="insp-title" class="gl">—</span><span class="x" id="insp-x">✕</span></div>
+      <div class="itabs" id="insp-tabs"></div>
+      <div class="ibody" id="insp-body"></div>
+    </div>
+
+    <div class="notifs" id="notifs"></div>
+    <div class="vbro">
+      <div class="vbport"><svg viewBox="0 0 200 230" width="64" height="74" style="display:block;filter:drop-shadow(0 0 4px currentColor)"><g id="vbFig" fill="none" stroke="#03110a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+        <g fill="currentColor" stroke="none"><path d="M84 176 L80 214 L96 214 L98 178 Z"/><path d="M116 176 L120 214 L104 214 L102 178 Z"/></g>
+        <path d="M78 211 L98 211"/><path d="M102 211 L122 211"/><path d="M100 178 L100 201"/>
+        <path fill="currentColor" stroke="none" d="M64 116 C72 108 128 108 136 116 L146 180 L54 180 Z"/>
+        <path d="M82 116 L100 134 L118 116"/><path d="M100 134 L100 178"/><path d="M56 168 L144 168"/>
+        <path fill="currentColor" stroke="none" d="M66 118 C48 126 42 152 50 174 C54 184 70 184 74 174 L72 150 C72 136 70 124 66 118 Z"/><circle cx="60" cy="176" r="11" fill="currentColor" stroke="none"/>
+        <g id="vbArm"><path fill="currentColor" stroke="none" d="M128 116 C144 110 164 92 168 64 L186 66 C182 98 158 122 136 126 Z"/><circle cx="176" cy="56" r="17" fill="currentColor" stroke="none"/><path fill="currentColor" stroke="currentColor" stroke-width="1.5" d="M180 22 C180 12 196 12 196 24 L196 46 C190 50 182 48 180 42 Z"/></g>
+        <g id="vbHead"><path fill="currentColor" stroke="none" d="M56 44 C50 18 84 6 104 16 C92 20 84 30 84 44 C74 30 64 32 56 44 Z"/><ellipse cx="100" cy="70" rx="50" ry="48"/><ellipse cx="147" cy="80" rx="9" ry="12"/><circle cx="84" cy="66" r="3.6" fill="currentColor" stroke="none"/><circle cx="114" cy="64" r="3.6" fill="currentColor" stroke="none"/><path d="M74 90 Q100 116 128 88"/></g>
+      </g></svg><div class="nm">VOLT-BRO</div></div>
+      <div class="vbub" id="vbub">Подключаюсь к ядру…</div>
+    </div>
+  </div>
+
+  <div class="ft"><span>NODE VPS-01 · Black Noir</span><span id="clock">live</span></div>
 </div>
-<main>
-  <section class="screen" id="s-map"><h2>КАРТА · ОБЛАКО ЯДРА</h2>
-    <div class="box"><div id="coreinfo" class="empty">нет связи с ядром</div></div>
-    <div class="grid" id="clusters"></div>
-  </section>
-  <section class="screen" id="s-tasks"><h2>ЗАДАЧИ</h2><div class="box" id="tasks"><div class="empty">—</div></div></section>
-  <section class="screen" id="s-chat"><h2>ЧАТ · МОДУЛЬ ВЗАИМОДЕЙСТВИЯ</h2>
-    <div id="chatlog" class="box"></div>
-    <div id="chatin"><input id="msg" placeholder="сообщение ядру…" autocomplete="off"/><button class="act" id="send">→</button></div>
-  </section>
-  <section class="screen" id="s-systems"><h2>СИСТЕМЫ · ЖЕЛЕЗО (live)</h2>
-    <div class="row"><div class="box card" id="metrics"><div class="empty">—</div></div>
-      <div class="box card" id="hw"><div class="empty">—</div></div></div>
-    <div class="box"><h3>GOVERNOR · аудит</h3><div id="gov"><div class="empty">—</div></div></div>
-  </section>
-  <section class="screen" id="s-ideas"><h2>ИДЕИ <button class="act" id="genidea">+ СГЕНЕРИРОВАТЬ</button></h2>
-    <div class="box" id="ideas"><div class="empty">—</div></div></section>
-  <section class="screen" id="s-profile"><h2>ПРОФИЛЬ ВЛАДЕЛЬЦА (C2 · live)</h2>
-    <div class="box"><h3>Сводка по доменам</h3><div id="pfacts"><div class="empty">нет данных профиля</div></div></div>
-    <div class="box"><h3>Активные гипотезы</h3><div id="phyp"><div class="empty">—</div></div></div>
-  </section>
-</main>
-<script>
-// API base: VITE_API_BASE (build) or window.NOIR_API_BASE (runtime/test) or query ?api=
-const params=new URLSearchParams(location.search);
-// Core URL: ?api= override > runtime NOIR_API_BASE > build-time VITE_API_BASE > deploy default.
-// Default is the trusted-TLS domain (real Let's Encrypt) so the installed app connects out-of-box.
-const API=(params.get("api")||window.NOIR_API_BASE||(window.__VITE_API_BASE__)||"https://jarvisgod.duckdns.org").replace(/\/$/,"");
-const WS=API.replace(/^http/,"ws");
-const $=s=>document.querySelector(s); const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
-const CLUSTERS={C1:"C1 ВЗАИМОДЕЙСТВИЕ",C2:"C2 ПАМЯТЬ",C3:"C3 ВОСПРИЯТИЕ",C4:"САМОУЛУЧШЕНИЕ",C5:"C5 БЕЗОПАСНОСТЬ",C6:"C6 ИНСТРУМЕНТЫ"};
-const SCREENS=["map","tasks","chat","systems","ideas","profile"];
-const LBL={map:"КАРТА",tasks:"ЗАДАЧИ",chat:"ЧАТ",systems:"СИСТЕМЫ",ideas:"ИДЕИ",profile:"ПРОФИЛЬ"};
-let route="map";
-const nav=$("#nav"); SCREENS.forEach(s=>{const b=el("button",s==route?"on":"",LBL[s]);b.onclick=()=>go(s);b.dataset.s=s;nav.appendChild(b);});
-function go(s){route=s;document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.s==s));
-  document.querySelectorAll(".screen").forEach(x=>x.classList.remove("on"));$("#s-"+s).classList.add("on");}
-go("map");
-// theme toggle green<->gold
-let theme=localStorage.getItem("noir.theme")||"green"; document.documentElement.dataset.theme=theme;
-$("#theme").onclick=()=>{theme=theme=="green"?"gold":"green";document.documentElement.dataset.theme=theme;localStorage.setItem("noir.theme",theme);};
-setInterval(()=>{$("#clock").textContent=new Date().toISOString().slice(11,19);},1000);
-
-async function api(p,opt){const r=await fetch(API+p,opt);if(!r.ok)throw new Error(r.status);return r.json();}
-function setConn(s){const d=$("#conn"),l=$("#connlbl");d.className="dot "+(s=="online"?"ok":s=="busy"?"busy":"err");l.textContent=s;}
-
-async function loadCore(){try{const c=await api("/api/core");setConn("online");
-  $("#brand").textContent=(c.name||"NOIR").toUpperCase();
-  const ai=(c.ai||[]).map(a=>`<div class="kv"><span>${a.name} <small>(${a.role})</small></span><b>${a.status}</b> <small>${a.model}</small></div>`).join("");
-  $("#coreinfo").innerHTML=`<div class="kv"><span>СОСТАВ ИИ ядра (${(c.ai||[]).length})</span><b>${c.model}</b></div>${ai}`;
-}catch(e){setConn("offline");}}
-
-async function loadModules(){try{const d=await api("/api/modules");const mods=d.modules||[];
-  const wrap=$("#clusters");wrap.innerHTML="";
-  Object.keys(CLUSTERS).forEach(cid=>{const col=el("div","col");col.appendChild(el("h3",null,CLUSTERS[cid]));
-    const here=mods.filter(m=>m.cluster==cid);
-    if(!here.length)col.appendChild(el("div","empty","—"));
-    here.forEach(m=>{const dotc=m.status=="idle"?"ok":m.status=="busy"?"busy":m.status=="error"?"err":"";
-      col.appendChild(el("div","mod",`<i class="dot ${dotc}"></i>${m.display_name||m.name}<br><small>v${m.version} · ${m.status} · ${(m.tools||[]).length} tools</small>`));});
-    wrap.appendChild(col);});
-}catch(e){}}
-
-async function loadSystems(){try{const m=await api("/api/systems/metrics");
-  $("#metrics").innerHTML=`<h3>МЕТРИКИ ХОСТА</h3>
-    <div class="kv"><span>CPU</span><b>${m.cpu}%</b></div>
-    <div class="kv"><span>RAM</span><b>${m.ram}% (${m.ram_used_mb}/${m.ram_total_mb} МБ)</b></div>
-    <div class="kv"><span>Uptime</span><b>${m.uptime}</b></div>
-    <div class="kv"><span>Cores / GPU</span><b>${m.cores} / ${m.gpu?"да":"нет"}</b></div>`;
-  const s=await api("/api/systems");const h=s.hardware;
-  $("#hw").innerHTML=`<h3>ЛОКАЛЬНЫЙ СЛОЙ</h3>
-    <div class="kv"><span>Профиль</span><b>${h.local_layer}</b></div>
-    <div class="kv"><span>Reflex</span><b>${h.reflex}</b></div>
-    <div class="kv"><span>STT/TTS</span><b>whisper-${h.whisper_model} / piper</b></div>
-    <div class="kv"><span>Embeddings</span><b>${s.embedding.model} (${s.embedding.dim})</b></div>`;
-}catch(e){}
-try{const g=await api("/api/governor/audit?limit=8");
-  $("#gov").innerHTML=(g.audit||[]).map(a=>`<div class="kv"><span>${a.module}.${a.tool} <small>${a.action_class}</small></span><b>${a.decision}</b> <small>ok=${a.ok}</small></div>`).join("")||'<div class="empty">—</div>';
-}catch(e){}}
-
-async function loadTasks(){try{const d=await api("/api/tasks");const t=d.tasks||[];
-  $("#tasks").innerHTML=t.length?t.map(x=>`<div class="kv"><span>${x.title||x.id}</span><b>${x.status}</b></div>`).join(""):'<div class="empty">нет задач</div>';
-}catch(e){}}
-
-async function loadIdeas(){try{const d=await api("/api/ideas?limit=12");const it=d.ideas||[];
-  $("#ideas").innerHTML=it.length?it.map(i=>`<div class="kv"><span>${i.text}</span><span class="chip ${i.status}">${i.status}</span></div>`).join(""):'<div class="empty">нет идей</div>';
-}catch(e){}}
-$("#genidea").onclick=async()=>{$("#genidea").textContent="…";try{await api("/api/ideas/generate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({n:2})});await loadIdeas();}catch(e){}$("#genidea").textContent="+ СГЕНЕРИРОВАТЬ";};
-
-async function loadProfile(){try{const d=await api("/api/memory?module=owner_profile");
-  const by={};(d.items||[]).forEach(f=>{(by[f.type]=by[f.type]||[]).push(f);});
-  const html=Object.keys(by).map(dom=>`<div class="mod"><b>${dom}</b>${by[dom].map(f=>`<div class="kv"><span>${f.value}</span><small>${(f.confidence||"")} · ${f.source||""}</small></div>`).join("")}</div>`).join("");
-  $("#pfacts").innerHTML=html||'<div class="empty">нет данных профиля</div>';
-  $("#phyp").innerHTML=(d.hypotheses||[]).map(h=>`<div class="kv"><span>${h.statement}</span><span class="chip ${h.verdict||h.status}">${h.verdict||h.status}</span></div>`).join("")||'<div class="empty">—</div>';
-}catch(e){}}
-
-// chat (POST /api/chat; live)
-let sid=null;
-async function sendChat(){const i=$("#msg");const text=i.value.trim();if(!text)return;i.value="";
-  $("#chatlog").appendChild(el("div","msg me","» "+text));
-  try{const r=await api("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message:text,session_id:sid})});
-    sid=r.session_id;$("#chatlog").appendChild(el("div","msg ai",r.reply));
-  }catch(e){$("#chatlog").appendChild(el("div","msg sys","[нет связи с ядром]"));}
-  $("#chatlog").scrollTop=1e9;}
-$("#send").onclick=sendChat;$("#msg").addEventListener("keydown",e=>{if(e.key=="Enter")sendChat();});
-
-async function refresh(){await loadCore();await Promise.all([loadModules(),loadSystems(),loadTasks(),loadIdeas(),loadProfile()]);}
-refresh();setInterval(refresh,5000);
-window.__noirReady=true;
-</script>
+<script type="module" src="./main.js"></script>
 </body>
 </html>

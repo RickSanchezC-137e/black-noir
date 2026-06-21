@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<!--
+  ВИЗУАЛЬНЫЙ ЭТАЛОН ДЕСКТОПА Black Noir (НЕ продакшн-код).
+  Назначение: показать, КАК должен выглядеть интерфейс (Pip-Boy CRT + 3D «облако ядра»,
+  кластеры/модули как светящиеся узлы, companion Волт-Бро, уведомления, тема green⇄gold).
+  ПРАВИЛА для реализации (06_desktop.md, CANON §8):
+   • Копировать ВИД (композиция, CRT-эффект, 3D-граф, цвета, типографика), НЕ копировать мок-данные.
+   • Все данные — ЖИВЫЕ через API ядра: /api/modules, /api/systems, /api/tasks, /api/ideas,
+     /api/chat, /api/governor, /api/memory и WS /ws/*.  Здесь значения — заглушки только для вида.
+   • Окно: своя титульная панель с drag-region и кнопками свернуть/развернуть/закрыть,
+     resizable + maximizable + полноэкранный режим (см. .winbar ниже и tauri.conf.json).
+   • Текущая серверная сборка слишком плоская/текстовая — нужно реализовать ПОЛНЫЙ вид по этому эталону.
+-->
+<html lang="ru"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+:root{--mono:"JetBrains Mono",Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
+#px{position:relative;height:100vh;display:flex;flex-direction:column;background:#02100a;color:#4dffa0;font-family:var(--mono);overflow:hidden}
+#px.gold{background:#0f0b02;color:#f5bd3a}
+.scan{position:absolute;inset:0;pointer-events:none;z-index:30;background:repeating-linear-gradient(rgba(0,0,0,0) 0 2px,rgba(0,0,0,.2) 2px 3px)}
+.vig{position:absolute;inset:0;pointer-events:none;z-index:30;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 60%,rgba(0,0,0,.5) 100%)}
+.gl{text-shadow:0 0 8px currentColor}
+/* титульная панель окна: drag + кнопки */
+.winbar{display:flex;align-items:center;height:30px;padding:0 8px;border-bottom:1px solid currentColor;-webkit-app-region:drag;font-size:11px;letter-spacing:1px}
+.winbar .wt{opacity:.7}
+.winbar .wbtns{margin-left:auto;display:flex;gap:6px;-webkit-app-region:no-drag}
+.winbar .wbtns button{width:26px;height:20px;background:transparent;border:1px solid currentColor;color:currentColor;border-radius:3px;cursor:pointer;font-family:var(--mono)}
+.winbar .wbtns .cl{color:#ff7a6b;border-color:#ff7a6b}
+.hd{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid currentColor;font-size:11px;letter-spacing:1px}
+.tabs{display:flex;gap:10px;flex:1}
+.tab{background:transparent;border:0;color:currentColor;font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:2px;cursor:pointer;opacity:.5}
+.tab.on{opacity:1;text-shadow:0 0 8px currentColor}
+.tab.on::before{content:"\2310";margin-right:5px}.tab.on::after{content:"\00AC";margin-left:5px}
+.ico{background:transparent;border:1px solid currentColor;color:currentColor;font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:3px;cursor:pointer}
+.screen{position:relative;flex:1;min-height:0}
+.pane{position:absolute;inset:0;padding:0}
+.pane.hidden{display:none}
+.ttl{padding:8px 14px;font-size:12px;letter-spacing:2px}
+#map canvas{position:absolute;top:0;left:0}
+.labels{position:absolute;inset:0;pointer-events:none;z-index:5}
+.lab{position:absolute;transform:translate(-50%,-50%);font-size:11px;background:rgba(0,0,0,.5);padding:1px 5px;border-radius:3px;text-shadow:0 0 5px currentColor;white-space:nowrap}
+.lab.cl{letter-spacing:1.5px}
+.sub{position:absolute;top:42px;left:12px;z-index:6;display:flex;gap:4px}
+.sb{background:rgba(0,0,0,.5);border:1px solid currentColor;color:currentColor;font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:3px;cursor:pointer;opacity:.5}
+.sb.on{opacity:1}
+.hint{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:11px;opacity:.45;z-index:6}
+.cols{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:12px 14px;font-size:11px}
+.col h4{margin:0 0 8px;font-size:11px;letter-spacing:1px;opacity:.75}
+.mod{border:1px solid rgba(127,127,127,.4);border-radius:5px;padding:7px 9px;margin-bottom:7px;cursor:pointer}
+.mod b{font-weight:400}.mod .m{font-size:10px;opacity:.6;margin-top:3px}
+.dot{color:#4dffa0}.dot.err{color:#ff7a6b}.dot.idle{opacity:.6}
+.notifs{position:absolute;right:12px;bottom:12px;width:230px;z-index:25;display:flex;flex-direction:column;gap:8px}
+.toast{border:1px solid currentColor;border-left:3px solid currentColor;background:rgba(0,0,0,.9);border-radius:4px;padding:8px 10px;font-size:11px}
+.vbro{position:absolute;left:13px;bottom:13px;z-index:20;display:flex;align-items:flex-end;gap:8px}
+.vbport{border:1px solid currentColor;background:rgba(0,0,0,.6);border-radius:4px;padding:4px 7px 2px}
+.vbport .nm{text-align:center;font-size:10px;opacity:.85}
+.vbub{border:1px solid currentColor;background:rgba(0,0,0,.8);border-radius:6px;padding:8px 10px;font-size:11px;max-width:230px}
+.prof{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px}
+.card{border:1px solid rgba(127,127,127,.35);border-radius:6px;padding:11px 13px}
+.card h5{margin:0 0 8px;font-size:11px;letter-spacing:1px}
+.row{display:flex;justify-content:space-between;font-size:12px;margin:3px 0;opacity:.9}
+.bar{height:5px;background:rgba(127,127,127,.25);border-radius:3px;overflow:hidden;margin:4px 0 8px}.bar>i{display:block;height:100%;background:currentColor}
+.ft{display:flex;justify-content:space-between;padding:5px 12px;border-top:1px solid currentColor;font-size:11px;opacity:.7}
+</style></head>
+<body>
+<div id="px">
+  <div class="scan"></div><div class="vig"></div>
+  <div class="winbar"><span class="wt gl">BLACK NOIR</span><span class="wt" style="margin-left:10px;opacity:.5">эталон вида · перетаскивание = data-tauri-drag-region</span>
+    <div class="wbtns"><button title="свернуть">&#8211;</button><button title="развернуть">&#9633;</button><button class="cl" title="закрыть">&#10005;</button></div></div>
+  <div class="hd"><span class="gl" style="letter-spacing:2px">BLACK NOIR</span><span style="opacity:.7">&#9679; online</span>
+    <div class="tabs"><button class="tab on" data-go="map">КАРТА</button><button class="tab" data-go="tasks">ЗАДАЧИ</button><button class="tab" data-go="chat">ЧАТ</button><button class="tab" data-go="sys">СИСТЕМЫ</button><button class="tab" data-go="ideas">ИДЕИ</button><button class="tab" data-go="prof">ПРОФИЛЬ</button></div>
+    <button class="ico" id="theme">&#9680; GREEN/GOLD</button></div>
+
+  <div class="screen" id="screen">
+    <div class="pane" data-tab="map" id="map">
+      <div class="ttl gl">КАРТА · ОБЛАКО ЯДРА</div>
+      <div class="sub"><button class="sb on">3D ОБЛАКО</button><button class="sb">2D СХЕМА</button></div>
+      <div class="labels" id="labels"></div>
+      <div class="hint">тащи — вращать · колесо — приближать · клик по облаку — влететь · по модулю — инспектор · по ядру — состав ИИ</div>
+    </div>
+    <div class="pane hidden" data-tab="tasks"><div class="ttl gl">ЗАДАЧИ</div><div style="padding:0 14px;font-size:12px">канбан: В ОЧЕРЕДИ · В ПРОЦЕССЕ · ГОТОВО · клик по задаче → боковая панель (ИНФО/ЛОГ/ВЕТВЬ/ЧАТ с агентом задачи). Данные из /api/tasks.</div></div>
+    <div class="pane hidden" data-tab="chat"><div class="ttl gl">ЧАТ · МОДУЛЬ ВЗАИМОДЕЙСТВИЯ</div><div style="padding:0 14px;font-size:12px">голосовая строка (всегда-онлайн), сбор реплик → цельный запрос ядру, кнопка ВИЗУАЛ → окно-«лицо» ядра из частиц. /api/chat + /ws/chat.</div></div>
+    <div class="pane hidden" data-tab="sys"><div class="ttl gl">СИСТЕМЫ · ЖЕЛЕЗО (live)</div><div style="padding:0 14px;font-size:12px">метрики хоста (glances) + локальный слой + аудит Governor — всё live из /api/systems, /api/governor.</div></div>
+    <div class="pane hidden" data-tab="ideas"><div class="ttl gl">ИДЕИ</div><div style="padding:0 14px;font-size:12px">приём GitHub-репо/ссылок/файлов/видео + TG-бот; колонки НА РАЗБОРЕ/ХОРОШИЕ/ПЛОХИЕ; клик → боковая панель ИНФО/ТЕСТЫ/ЧАТ. /api/ideas.</div></div>
+    <div class="pane hidden" data-tab="prof"><div class="ttl gl">ПРОФИЛЬ ВЛАДЕЛЬЦА</div>
+      <div class="prof">
+        <div class="card"><h5>ДОМЕНЫ</h5><div class="row"><span>Привычки</span><span>34 факта</span></div><div class="row"><span>Расписание</span><span>12 событий</span></div><div class="row"><span>Задачи/проекты</span><span>5 активных</span></div><div class="row"><span>Финансы</span><span>модель · аналитика</span></div><div class="row"><span>Цели</span><span>3 · прогресс</span></div></div>
+        <div class="card"><h5>ЗДОРОВЬЕ (наблюдение)</h5><div class="row"><span>Сон</span><span>6.8 ч</span></div><div class="bar"><i style="width:68%"></i></div><div class="row"><span>Активность</span><span>средняя</span></div><div class="bar"><i style="width:52%"></i></div></div>
+        <div class="card"><h5>ГИПОТЕЗЫ</h5><div class="row"><span>Продуктивнее до полудня</span><span>подтв. 82%</span></div><div class="row"><span>Срыв дедлайнов при &gt;5 задач</span><span>проверка</span></div></div>
+        <div class="card"><h5>СВЕРКА</h5><div class="row"><span>Источники</span><span>чат·голос·зрение</span></div><div class="row"><span>Конфликтов</span><span>1 на уточнение</span></div><div style="font-size:10px;opacity:.6;margin-top:6px">данные — из /api (модуль owner_profile)</div></div>
+      </div>
+    </div>
+
+    <div class="notifs" id="notifs"></div>
+    <div class="vbro">
+      <div class="vbport"><svg viewBox="0 0 200 230" width="64" height="74" style="display:block;filter:drop-shadow(0 0 4px currentColor)"><g id="vbFig" fill="none" stroke="#03110a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+        <g fill="currentColor" stroke="none"><path d="M84 176 L80 214 L96 214 L98 178 Z"/><path d="M116 176 L120 214 L104 214 L102 178 Z"/></g>
+        <path d="M78 211 L98 211"/><path d="M102 211 L122 211"/><path d="M100 178 L100 201"/>
+        <path fill="currentColor" stroke="none" d="M64 116 C72 108 128 108 136 116 L146 180 L54 180 Z"/>
+        <path d="M82 116 L100 134 L118 116"/><path d="M100 134 L100 178"/><path d="M56 168 L144 168"/>
+        <path fill="currentColor" stroke="none" d="M66 118 C48 126 42 152 50 174 C54 184 70 184 74 174 L72 150 C72 136 70 124 66 118 Z"/><circle cx="60" cy="176" r="11" fill="currentColor" stroke="none"/>
+        <g id="vbArm"><path fill="currentColor" stroke="none" d="M128 116 C144 110 164 92 168 64 L186 66 C182 98 158 122 136 126 Z"/><circle cx="176" cy="56" r="17" fill="currentColor" stroke="none"/><path fill="currentColor" stroke="currentColor" stroke-width="1.5" d="M180 22 C180 12 196 12 196 24 L196 46 C190 50 182 48 180 42 Z"/></g>
+        <g id="vbHead"><path fill="currentColor" stroke="none" d="M56 44 C50 18 84 6 104 16 C92 20 84 30 84 44 C74 30 64 32 56 44 Z"/><ellipse cx="100" cy="70" rx="50" ry="48"/><ellipse cx="147" cy="80" rx="9" ry="12"/><circle cx="84" cy="66" r="3.6" fill="currentColor" stroke="none"/><circle cx="114" cy="64" r="3.6" fill="currentColor" stroke="none"/><path d="M74 90 Q100 116 128 88"/></g>
+      </g></svg><div class="nm">VOLT-BRO</div></div>
+      <div class="vbub" id="vbub">Связь есть. Ядро Black Noir на линии.</div>
+    </div>
+  </div>
+  <div class="ft"><span>NODE VPS-01 · Black Noir</span><span id="clock">live</span></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  var d=document,px=d.getElementById('px');
+  // theme
+  var theme='green';d.getElementById('theme').addEventListener('click',function(){theme=theme==='green'?'gold':'green';px.classList.toggle('gold',theme==='gold');phos&&phos.set(theme==='green'?0x4dffa0:0xf5bd3a);if(window.__rt)window.__rt();});
+  // tabs
+  var tabs=px.querySelectorAll('.tab'),panes=px.querySelectorAll('.pane'),cur='map';
+  tabs.forEach(function(b){b.addEventListener('click',function(){cur=b.getAttribute('data-go');tabs.forEach(function(x){x.classList.toggle('on',x===b);});panes.forEach(function(p){p.classList.toggle('hidden',p.getAttribute('data-tab')!==cur);});if(cur==='map')resize();});});
+  // companion idle anim
+  var arm=d.getElementById('vbArm'),head=d.getElementById('vbHead'),fig=d.getElementById('vbFig'),t0=Date.now();
+  (function a(){requestAnimationFrame(a);var t=(Date.now()-t0)/1000;fig.setAttribute('transform','translate(0 '+(Math.sin(t*2.2)*2.4).toFixed(2)+')');arm.setAttribute('transform','rotate('+(Math.sin(t*6)*7).toFixed(2)+' 130 120)');head.setAttribute('transform','rotate('+(Math.sin(t*1.4)*1.6).toFixed(2)+' 100 118)');})();
+  // notifications demo
+  var NB=d.getElementById('notifs'),N=[['МОДУЛЬ ЗАВЕРШИЛ ЗАДАЧУ'],['ЗРЕНИЕ: НОВЫЙ КАДР'],['НАЙДЕНО УЛУЧШЕНИЕ']],ni=0;
+  setInterval(function(){var e=d.createElement('div');e.className='toast';e.textContent='● '+N[ni++%N.length][0];NB.appendChild(e);while(NB.children.length>3)NB.removeChild(NB.firstChild);setTimeout(function(){e.remove();},5000);},4200);
+  function tick(){var t=new Date(),p=function(x){return x<10?'0'+x:x;};d.getElementById('clock').textContent=p(t.getHours())+':'+p(t.getMinutes())+' · live';}tick();setInterval(tick,30000);
+
+  // ===== 3D ОБЛАКО ЯДРА (центр + 6 кластеров + модули) =====
+  var map=d.getElementById('map'),labels=d.getElementById('labels'),phos;
+  var CL=[
+   {n:'C1 ВЗАИМОДЕЙСТВИЕ',p:[0,30,-150],mods:['Чат-IO','Telegram','Голос-IO']},
+   {n:'C2 ПАМЯТЬ',p:[-155,0,30],mods:['ChromaDB','SQLite','Owner Profile','Промпт']},
+   {n:'C3 ВОСПРИЯТИЕ',p:[125,35,-65],mods:['Зрение','OCR','Видео','Слух']},
+   {n:'C4 САМОУЛУЧШЕНИЕ',p:[45,-25,150],mods:['Scout','Фабрика','Eval']},
+   {n:'C5 БЕЗОПАСНОСТЬ',p:[-100,35,105],mods:['Governor','Аудит','Kill']},
+   {n:'C6 ИНСТРУМЕНТЫ',p:[150,-20,55],mods:['Web','Tavily','Shell','Git']}
+  ];
+  function boot(){if(!window.THREE)return setTimeout(boot,60);var T=window.THREE;
+    var W=map.clientWidth||900,H=map.clientHeight||600;phos=new T.Color(0x4dffa0);
+    var sc=new T.Scene(),cam=new T.PerspectiveCamera(54,W/H,.1,6000);
+    var r=new T.WebGLRenderer({antialias:true,alpha:true});r.setSize(W,H);r.setClearColor(0,0);map.insertBefore(r.domElement,map.firstChild);
+    var themed=[];function mat(o){var m=new T.MeshBasicMaterial(Object.assign({color:phos.clone()},o||{}));themed.push(m);return m;}
+    function lmat(op){var m=new T.LineBasicMaterial({color:phos.clone(),transparent:true,opacity:op,blending:T.AdditiveBlending,depthWrite:false});themed.push(m);return m;}
+    var cv=d.createElement('canvas');cv.width=cv.height=128;var g=cv.getContext('2d'),gr=g.createRadialGradient(64,64,0,64,64,64);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.25,'rgba(255,255,255,.5)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,128,128);var GT=new T.CanvasTexture(cv);
+    function spr(s,op){var m=new T.SpriteMaterial({map:GT,color:phos.clone(),blending:T.AdditiveBlending,transparent:true,depthWrite:false,opacity:op});themed.push(m);var p=new T.Sprite(m);p.scale.set(s,s,1);return p;}
+    var stars=new Float32Array(330*3);for(var i=0;i<330;i++){var rr=460+Math.random()*1400,a=Math.random()*6.28,b=Math.acos(2*Math.random()-1);stars[i*3]=rr*Math.sin(b)*Math.cos(a);stars[i*3+1]=rr*Math.cos(b);stars[i*3+2]=rr*Math.sin(b)*Math.sin(a);}
+    var sg=new T.BufferGeometry();sg.setAttribute('position',new T.BufferAttribute(stars,3));var sm=new T.PointsMaterial({color:0x2e7d5a,size:1.7,transparent:true,opacity:.5});sc.add(new T.Points(sg,sm));
+    sc.add(new T.Mesh(new T.SphereGeometry(8,24,24),mat()));sc.add(new T.Mesh(new T.SphereGeometry(15,18,18),mat({transparent:true,opacity:.16})));var cgl=spr(95,.5);sc.add(cgl);
+    var O=new T.Vector3(),mk=function(t,c){var e=d.createElement('div');e.className='lab'+(c?' '+c:'');e.textContent=t;labels.appendChild(e);return e;};
+    var lc=mk('NOIR','cl');var labArr=[{e:lc,get:function(){return O;}}];
+    CL.forEach(function(c){c.v=new T.Vector3(c.p[0],c.p[1],c.p[2]);var grp=new T.Group();grp.position.copy(c.v);sc.add(grp);
+      grp.add(new T.Mesh(new T.SphereGeometry(5.5,16,16),mat()));grp.add(spr(30,.7));
+      sc.add(new T.Line(new T.BufferGeometry().setFromPoints([O,c.v]),lmat(.3)));
+      labArr.push({e:mk(c.n,'cl'),get:(function(v){return function(){return v;};})(c.v)});
+      c.mods.forEach(function(mn,j){var a=j/c.mods.length*6.28,lp=new T.Vector3(28*Math.cos(a),(j%2?8:-8),28*Math.sin(a));var mm=new T.Mesh(new T.SphereGeometry(3.4,12,12),mat());mm.position.copy(lp);grp.add(mm);var mgl=spr(11,.6);mgl.position.copy(lp);grp.add(mgl);grp.add(new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(),lp]),lmat(.35)));});
+    });
+    window.__rt=function(){themed.forEach(function(m){m.color&&m.color.copy(phos);});};
+    var look=new T.Vector3(),th=.5,ph=1.05,dist=430,rot=false,lx,ly,vp=new T.Vector3();
+    map.addEventListener('pointerdown',function(e){rot=true;lx=e.clientX;ly=e.clientY;});
+    window.addEventListener('pointermove',function(e){if(!rot)return;th-=(e.clientX-lx)*.005;ph-=(e.clientY-ly)*.005;ph=Math.max(.2,Math.min(2.9,ph));lx=e.clientX;ly=e.clientY;});
+    window.addEventListener('pointerup',function(){rot=false;});
+    map.addEventListener('wheel',function(e){e.preventDefault();dist*=(e.deltaY>0?1.1:.9);dist=Math.max(60,Math.min(900,dist));},{passive:false});
+    window.__resize=function(){W=map.clientWidth||W;H=map.clientHeight||H;r.setSize(W,H);cam.aspect=W/H;cam.updateProjectionMatrix();};
+    function frame(){requestAnimationFrame(frame);if(cur!=='map')return;if(!rot)th+=.0008;
+      cam.position.set(look.x+dist*Math.sin(ph)*Math.sin(th),look.y+dist*Math.cos(ph),look.z+dist*Math.sin(ph)*Math.cos(th));cam.lookAt(look);
+      r.render(sc,cam);
+      labArr.forEach(function(l){vp.copy(l.get()).project(cam);if(vp.z>1){l.e.style.display='none';return;}l.e.style.display='block';l.e.style.left=((vp.x*.5+.5)*W)+'px';l.e.style.top=((-vp.y*.5+.5)*H)+'px';});
+    }frame();
+  }
+  function resize(){if(window.__resize)window.__resize();}
+  boot();window.addEventListener('resize',resize);
+})();
+</script>
+</body></html>
