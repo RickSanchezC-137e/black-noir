@@ -48,7 +48,8 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 .s2chip{border:1px solid currentColor;border-radius:3px;padding:2px 6px;cursor:pointer;opacity:.6;white-space:nowrap}
 .s2chip.on{opacity:1}
 .s2act{margin-left:auto;opacity:.75;letter-spacing:1px}
-#s2svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#s2svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:auto;cursor:grab;touch-action:none}
+#s2svg:active{cursor:grabbing}
 #s2svg .nd{pointer-events:auto}
 #s2svg .lnk{stroke:currentColor;fill:none;stroke-width:1.3;opacity:.5}
 #s2svg .lnk.flow{stroke-dasharray:3 7;animation:s2dash 1.1s linear infinite}
@@ -209,7 +210,7 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
     <div class="pane" data-tab="map" id="map">
       <div class="ttl gl">КАРТА · СХЕМА ЯДРА</div>
       <div class="schema2d" id="schema2d">
-        <div class="s2bar"><input id="s2search" placeholder="поиск модуля…" autocomplete="off"/><span class="s2chips" id="s2chips"></span><span class="s2act" id="s2act">—</span></div>
+        <div class="s2bar"><input id="s2search" placeholder="поиск модуля…" autocomplete="off"/><span class="s2chip" id="s2fit" title="вписать всё">⤢ FIT</span><span class="s2chips" id="s2chips"></span><span class="s2act" id="s2act">—</span></div>
         <svg id="s2svg" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet"></svg>
       </div>
       <div class="hint" id="maphint">клик по ядру — состав ИИ · по модулю — инспектор · подсветка = модуль активен · импульс по линии = обмен данными</div>

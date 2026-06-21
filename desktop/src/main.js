@@ -262,6 +262,21 @@ function openInspector(kind, id) {
 // ====================================================================
 let s2q = "", s2hidden = new Set();
 let s2nodes = {}, s2corePos = null;        // live SVG positions for packet animation
+let VB = { x: 0, y: 0, w: 1000, h: 640 }, vbAuto = true;   // map viewBox (pan/zoom/auto-fit)
+function applyVB() { const svg = $("#s2svg"); if (svg) svg.setAttribute("viewBox", `${VB.x.toFixed(1)} ${VB.y.toFixed(1)} ${VB.w.toFixed(1)} ${VB.h.toFixed(1)}`); }
+function fitVB() {
+  const xs = [500], ys = [320]; Object.values(s2nodes).forEach((n) => { xs.push(n.x); ys.push(n.y); });
+  const minX = Math.min(...xs) - 160, maxX = Math.max(...xs) + 160, minY = Math.min(...ys) - 100, maxY = Math.max(...ys) + 100;
+  VB = { x: minX, y: minY, w: Math.max(420, maxX - minX), h: Math.max(320, maxY - minY) }; applyVB();
+}
+function setupPanZoom() {
+  const svg = $("#s2svg"); if (!svg || svg.__pz) return; svg.__pz = 1;
+  let pan = false, sx, sy, ox, oy;
+  svg.addEventListener("pointerdown", (e) => { if (e.target.closest(".nd")) return; pan = true; sx = e.clientX; sy = e.clientY; ox = VB.x; oy = VB.y; try { svg.setPointerCapture(e.pointerId); } catch (_) {} });
+  svg.addEventListener("pointermove", (e) => { if (!pan) return; const r = svg.getBoundingClientRect(); VB.x = ox - (e.clientX - sx) * VB.w / r.width; VB.y = oy - (e.clientY - sy) * VB.h / r.height; vbAuto = false; applyVB(); });
+  svg.addEventListener("pointerup", (e) => { pan = false; try { svg.releasePointerCapture(e.pointerId); } catch (_) {} });
+  svg.addEventListener("wheel", (e) => { e.preventDefault(); vbAuto = false; const r = svg.getBoundingClientRect(); const mx = VB.x + (e.clientX - r.left) / r.width * VB.w, my = VB.y + (e.clientY - r.top) / r.height * VB.h; const f = e.deltaY > 0 ? 1.1 : 0.9; VB.w = Math.max(120, Math.min(3000, VB.w * f)); VB.h = Math.max(80, Math.min(2000, VB.h * f)); VB.x = mx - (e.clientX - r.left) / r.width * VB.w; VB.y = my - (e.clientY - r.top) / r.height * VB.h; applyVB(); }, { passive: false });
+}
 const s2statusClass = (s) => s === "error" ? "err" : s === "busy" ? "busy" : s === "offline" ? "offline" : "live";
 
 function render2D() {
@@ -305,8 +320,10 @@ function render2D() {
   svg.querySelectorAll("[data-mod]").forEach((c) => c.onclick = () => openModule(c.getAttribute("data-mod")));
   const ce = svg.querySelector("[data-core]"); if (ce) ce.onclick = () => openInspector("core");
   $("#s2act").textContent = total ? `${active}/${total} ACTIVE` : "нет модулей";
+  if (vbAuto) fitVB(); else applyVB();
 }
 $("#s2search").addEventListener("input", (e) => { s2q = e.target.value.trim().toLowerCase(); render2D(); });
+$("#s2fit").onclick = () => { vbAuto = true; fitVB(); };
 
 // data-exchange packets travelling along the links (live activity)
 let packets = [];
@@ -771,6 +788,7 @@ async function refresh() {
 // ---------- boot ----------
 applyTheme();
 render2D();
+setupPanZoom();
 window.addEventListener("contextmenu", (e) => e.preventDefault());  // no browser context menu (save-image etc.)
 setupWindow();
 loadBotStatus();
