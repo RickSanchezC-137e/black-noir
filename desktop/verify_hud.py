@@ -82,6 +82,7 @@ def main() -> int:
         tab("sys")
         checks["systems: live host metrics"] = "CPU" in pg.inner_text("#metrics") and "RAM" in pg.inner_text("#metrics")
         checks["systems: governor audit"] = "GOVERNOR" in pg.inner_text("#gov")
+        checks["systems: self-analysis card"] = "САМОАНАЛИЗ" in pg.inner_text("#selfan")
         pg.screenshot(path=os.path.join(OUT, "4-systems.png"))
 
         tab("ideas")

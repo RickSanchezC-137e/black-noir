@@ -55,6 +55,20 @@ async def scout():
     return await selfimprove.scout_cycle()
 
 
+@router.post("/analyze")
+async def analyze():
+    """Self-analysis: mine own telemetry → ranked grounded improvement hypotheses."""
+    from app.core import self_analysis
+    return await self_analysis.analyze()
+
+
+@router.get("/analysis")
+async def analysis():
+    """Latest self-analysis report (desktop Systems card)."""
+    from app.core import self_analysis
+    return await self_analysis.latest()
+
+
 @router.post("/run")
 async def run(body: RunIn):
     """One self-improvement iteration: scout->build->eval gate->governor->promote/reject."""

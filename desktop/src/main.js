@@ -372,6 +372,16 @@ async function loadSystems() {
     $("#hw").innerHTML = `<h5>ЛОКАЛЬНЫЙ СЛОЙ</h5><div class="row"><span>Профиль</span><span>${esc(h.local_layer || h.profile || "—")}</span></div><div class="row"><span>Reflex</span><span>${esc(h.reflex || "cloud")}</span></div><div class="row"><span>Embeddings</span><span>${esc(s.embedding?.model || "—")} (${esc(s.embedding?.dim || "")})</span></div><div class="row"><span>Модулей</span><span>${modules.length}</span></div>`;
   } catch (e) { $("#metrics").innerHTML = "<div class='empty'>нет связи с ядром</div>"; }
   try { const g = await api("/api/governor/audit?limit=10"); $("#gov").innerHTML = `<h5>GOVERNOR · АУДИТ</h5>` + ((g.audit || []).map((a) => `<div class="row"><span>${esc(a.module)}.${esc(a.tool)} <span class="chip">${esc(a.action_class)}</span></span><span>${esc(a.decision)} ${a.ok ? "ok" : "fail"}</span></div>`).join("") || "<div class='empty'>аудит пуст</div>"); } catch (e) {}
+  try {
+    const a = await api("/api/systems/selfimprove/analysis"); const s = a.signals || {};
+    const hdr = `<h5>САМОАНАЛИЗ · АВТО-УЛУЧШЕНИЕ <button class="ico" id="run-selfan">ЗАПУСТИТЬ</button></h5>`;
+    $("#selfan").innerHTML = hdr + ((a.findings || []).length
+      ? `<div class="row"><span>Сигналов</span><span>${s.total_findings || 0} (сбои ${s.exec_failures || 0} · модули ${s.module_errors || 0} · задачи ${s.task_errors || 0})</span></div>`
+        + (a.findings || []).slice(0, 5).map((f) => `<div class="row"><span>${esc(f.signal)}</span><span class="chip">${f.count}× ${esc(f.kind)}</span></div>`).join("")
+        + `<div class="m" style="opacity:.6;margin-top:6px">обновлено ${esc((a.generated_at || "").slice(11, 19))} · гипотез в очереди: ${(a.enqueued || []).length}</div>`
+      : "<div class='empty'>отчётов ещё нет — нажмите ЗАПУСТИТЬ</div>");
+    const rb = $("#run-selfan"); if (rb) rb.onclick = async () => { rb.textContent = "…"; try { await api("/api/systems/selfimprove/analyze", { method: "POST" }); toast("Самоанализ выполнен"); await loadSystems(); } catch (e) { rb.textContent = "ЗАПУСТИТЬ"; } };
+  } catch (e) {}
 }
 
 // ====================================================================

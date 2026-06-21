@@ -51,6 +51,19 @@ async def night_tick() -> dict:
         sc = await selfimprove.scout_cycle()
         out["actions"].append({"scout": sc.get("scouted"), "decision": sc.get("decision"),
                                "module": sc.get("module"), "reason": sc.get("reason")})
+
+    # 3) self-analysis: ground next hypotheses in real telemetry, then run the top
+    #    finding through the full Builder→Eval→Governor cycle (budget-gated).
+    from app.core import self_analysis
+    rep = await self_analysis.analyze()
+    out["actions"].append({"self_analysis": rep["signals"], "enqueued": len(rep["enqueued"])})
+    ok3, _ = budget.can_spend()
+    if ok3 and rep["enqueued"] and budget.status()["builder_runs"] < settings.selfimprove_max_builder_runs:
+        budget.charge(requests=1, builder=1)
+        top = await self_analysis.run_top()
+        out["actions"].append({"self_improve_top": (top.get("finding") or {}).get("signal"),
+                               "decision": (top.get("result") or {}).get("decision")})
+
     out["budget"] = budget.status()
     return out
 
