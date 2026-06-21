@@ -1,9 +1,14 @@
 """/api/ideas (C4) — generate + list proactive initiatives. Telegram channel status."""
 from __future__ import annotations
 
-from fastapi import APIRouter
+import uuid
+from datetime import datetime, timezone
+
+import aiosqlite
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.config import settings
 from app.core import ideas as ideas_svc
 from app.core import telegram
 
@@ -15,6 +20,16 @@ class GenIn(BaseModel):
     topic: str = "продуктивность и проекты владельца"
 
 
+class IntakeIn(BaseModel):
+    # GitHub-репо / ссылка / файл / видео / ручной ввод (06_desktop.md §6.5)
+    source: str = "link"   # repo|link|file|video|text|telegram
+    value: str
+
+
+class RejectIn(BaseModel):
+    reason: str = ""
+
+
 @router.get("")
 async def list_ideas(limit: int = 20):
     return {"ideas": await ideas_svc.list_ideas(limit)}
@@ -23,6 +38,56 @@ async def list_ideas(limit: int = 20):
 @router.post("/generate")
 async def generate(body: GenIn):
     return {"ideas": await ideas_svc.generate(n=body.n, topic=body.topic)}
+
+
+@router.post("/intake")
+async def intake(body: IntakeIn):
+    """Accept an idea source (repo/link/file/video/text) into the review column."""
+    val = body.value.strip()
+    if not val:
+        raise HTTPException(422, "empty value")
+    iid = str(uuid.uuid4())
+    text = f"[{body.source}] {val}"
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        await db.execute(
+            "INSERT INTO ideas(id,text,status,created_at) VALUES(?,?,?,?)",
+            (iid, text, "new", datetime.now(timezone.utc).isoformat()))
+        await db.commit()
+    return {"id": iid, "text": text, "status": "new"}
+
+
+async def _set_status(idea_id: str, status: str) -> None:
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        cur = await db.execute("UPDATE ideas SET status=? WHERE id=?", (status, idea_id))
+        await db.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "idea not found")
+
+
+@router.post("/{idea_id}/accept")
+async def accept(idea_id: str):
+    """Accept an idea → create a task (queued) and mark the idea accepted (§6.5)."""
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT id,text FROM ideas WHERE id=?", (idea_id,))
+        row = await cur.fetchone()
+        if not row:
+            raise HTTPException(404, "idea not found")
+        tid = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        await db.execute(
+            "INSERT INTO tasks(id,kind,status,payload,created_at,updated_at)"
+            " VALUES(?,?,?,?,?,?)",
+            (tid, "idea", "queued", row["text"], now, now))
+        await db.execute("UPDATE ideas SET status='accepted' WHERE id=?", (idea_id,))
+        await db.commit()
+    return {"task_id": tid, "status": "accepted"}
+
+
+@router.post("/{idea_id}/reject")
+async def reject(idea_id: str, body: RejectIn | None = None):
+    await _set_status(idea_id, "rejected")
+    return {"ok": True}
 
 
 @router.get("/bot")

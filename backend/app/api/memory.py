@@ -20,7 +20,8 @@ class RememberIn(BaseModel):
 @router.get("")
 async def memory_slice(module: str = Query(None)):
     """Memory slice for a module's private namespace (HUD Profile panel, §6.7).
-    For owner_profile, returns profile facts as MemoryItem[]."""
+    For owner_profile returns facts/hypotheses + health metrics, schedule and goals
+    (10_owner_profile.md §11: домены, метрики, гипотезы, здоровье, расписание)."""
     if module == "owner_profile":
         async with aiosqlite.connect(settings.sqlite_path) as db:
             db.row_factory = aiosqlite.Row
@@ -35,8 +36,29 @@ async def memory_slice(module: str = Query(None)):
                 "SELECT id,statement,status,verdict FROM m_owner_profile__profile_hypothesis")
             hyps = [{"id": r["id"], "statement": r["statement"], "status": r["status"],
                      "verdict": r["verdict"]} for r in await cur.fetchall()]
-        return {"module": module, "items": items, "hypotheses": hyps}
-    return {"module": module, "items": [], "hypotheses": []}
+            cur = await db.execute(
+                "SELECT id,metric,value,unit,observed_at,source"
+                " FROM m_owner_profile__health_metric ORDER BY observed_at DESC LIMIT 60")
+            health = [{"id": r["id"], "metric": r["metric"], "value": r["value"],
+                       "unit": r["unit"], "ts": r["observed_at"], "source": r["source"]}
+                      for r in await cur.fetchall()]
+            cur = await db.execute(
+                "SELECT id,title,start,end,recurrence,source,status"
+                " FROM m_owner_profile__schedule_item ORDER BY start LIMIT 40")
+            schedule = [{"id": r["id"], "title": r["title"], "start": r["start"],
+                         "end": r["end"], "recurrence": r["recurrence"],
+                         "status": r["status"], "source": r["source"]}
+                        for r in await cur.fetchall()]
+            cur = await db.execute(
+                "SELECT id,title,horizon,progress,status,updated_at"
+                " FROM m_owner_profile__goal ORDER BY updated_at DESC LIMIT 40")
+            goals = [{"id": r["id"], "title": r["title"], "horizon": r["horizon"],
+                      "progress": r["progress"], "status": r["status"], "ts": r["updated_at"]}
+                     for r in await cur.fetchall()]
+        return {"module": module, "items": items, "hypotheses": hyps,
+                "health": health, "schedule": schedule, "goals": goals}
+    return {"module": module, "items": [], "hypotheses": [],
+            "health": [], "schedule": [], "goals": []}
 
 
 @router.post("/remember")

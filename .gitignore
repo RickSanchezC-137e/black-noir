@@ -33,3 +33,4 @@ desktop/dist/
 desktop/node_modules/
 modules/.adopt/
 .worktrees/
+desktop/_verify/
