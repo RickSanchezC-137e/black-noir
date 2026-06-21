@@ -112,6 +112,30 @@ async def run(body: RunIn):
                                       domain=body.domain, base=body.base)
 
 
+class ImproveIn(BaseModel):
+    module: str = "core"
+    intent: str = ""
+
+
+class ImpPromoteIn(BaseModel):
+    token: str
+
+
+@router.post("/improve")
+async def improve(body: ImproveIn):
+    """Owner-initiated improvement of a module: Builder→eval→diff (promote on confirm)."""
+    from app.core import realimprove
+    intent = (f"Улучши модуль {body.module}: {body.intent}. Меняй только относящийся к нему код; "
+              f"НЕ трогай Governor/конституцию; eval должен остаться зелёным.")
+    return await realimprove.owner_improve(intent, domain=body.module)
+
+
+@router.post("/improve/promote")
+async def improve_promote(body: ImpPromoteIn):
+    from app.core import realimprove
+    return await realimprove.owner_promote(body.token)
+
+
 @router.post("/rollback")
 async def rollback(body: RollbackIn):
     return await selfimprove.rollback(body.token)

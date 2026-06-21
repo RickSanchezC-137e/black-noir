@@ -299,3 +299,71 @@ if __name__ == "__main__":
         print(_json.dumps(asyncio.run(rollback(sys.argv[2])), ensure_ascii=False))
     else:
         print("usage: realimprove auto | build '<intent>' [--apply] | rollback <token>")
+
+
+# ---------------- owner-initiated improvement (build → eval → owner-confirm promote) ----------------
+async def owner_improve(intent: str, *, domain: str = "core") -> dict:
+    """Owner-driven: Builder change in a sandbox, eval (no-regression) gate, stash the diff for
+    owner-confirmed promotion. Relaxed vs build_real — owner decides value, eval guards safety."""
+    import asyncio
+    import uuid
+    ok, why = budget.can_spend()
+    if not ok:
+        return {"decision": "paused", "reason": why}
+    action = Action(module="realimprove", tool="owner_improve", action_class="self_modify", args={"intent": intent})
+    gov = governor.authorize(action)
+    if gov.decision == "KILL":
+        await audit(action, gov, ok=False); return {"decision": "KILL", "reason": gov.reason}
+    b = await asyncio.to_thread(builder.build, intent, timeout=600)
+    budget.charge(tokens=b.get("tokens", 0), builder=1, requests=1)
+    wt = Path(b["worktree"]); rep = {"intent": intent, "builder": {"ok": b.get("ok"), "diff_stat": b.get("diff_stat", "")}}
+    try:
+        subprocess.run(["git", "add", "-A"], cwd=str(wt), capture_output=True, timeout=60)
+        diff = subprocess.run(["git", "diff", "--cached"], cwd=str(wt), capture_output=True, text=True, timeout=60).stdout or b.get("diff", "")
+        if not diff.strip():
+            rep.update(decision="reject", reason="Builder не внёс изменений"); await audit(action, gov, ok=False); return rep
+        if _touches_constitution(diff):
+            governor.engage_kill("owner_improve touched constitution")
+            rep.update(decision="KILL", reason="диф трогает Governor/конституцию"); await audit(action, gov, ok=False); return rep
+        proc, base = spin_challenger(wt)
+        if not proc:
+            rep.update(decision="reject", reason="челленджер не стартовал (вероятно поломка)"); await audit(action, gov, ok=False); return rep
+        try:
+            chall = _eval(base, GATE_SUITES)
+        finally:
+            proc.terminate()
+        rep["eval"] = chall
+        if not chall.get("ok"):
+            rep.update(decision="failed", reason="eval красный в песочнице"); await audit(action, gov, ok=False); return rep
+        token = "imp_" + uuid.uuid4().hex[:10]
+        (REPO / ".worktrees").mkdir(exist_ok=True)
+        (REPO / ".worktrees" / f"{token}.fwd.patch").write_text(diff)
+        rep.update(decision="would_promote", token=token, diff=diff[:4000], diff_stat=b.get("diff_stat", ""),
+                   reason="песочница зелёная — подтвердите внедрение")
+        await audit(action, gov, ok=True)
+    finally:
+        builder.drop_worktree(wt)
+    return rep
+
+
+async def owner_promote(token: str, *, domain: str = "core") -> dict:
+    """Apply a stashed owner-improvement to live, restart, verify; auto-rollback on red live eval."""
+    fwd = Path(f"/home/jarvis/noir/.worktrees/{token}.fwd.patch")
+    if not fwd.exists():
+        return {"ok": False, "reason": "неизвестный токен"}
+    diff = fwd.read_text()
+    action = Action(module="realimprove", tool="owner_promote", action_class="self_modify")
+    gov = governor.authorize(action)
+    apply = subprocess.run(["git", "apply"], input=diff, cwd=str(REPO), capture_output=True, text=True)
+    if apply.returncode != 0:
+        await audit(action, gov, ok=False); return {"ok": False, "reason": f"git apply failed: {apply.stderr[:200]}"}
+    await _record_version(domain, subprocess.run(["git", "apply", "-R", "--check"], input=diff, cwd=str(REPO), capture_output=True, text=True).stdout or diff)
+    _restart_core()
+    live = _eval("http://127.0.0.1:8000", GATE_SUITES)
+    if not live.get("ok"):
+        subprocess.run(["git", "apply", "-R"], input=diff, cwd=str(REPO), capture_output=True, text=True)
+        _restart_core()
+        await audit(action, gov, ok=False)
+        return {"ok": False, "rolled_back": True, "reason": "live eval красный → авто-откат", "live": live}
+    await audit(action, gov, ok=True)
+    return {"ok": True, "promoted": True, "live": live, "rollback": "git apply -R " + str(fwd)}

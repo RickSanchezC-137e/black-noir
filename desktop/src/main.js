@@ -131,6 +131,26 @@ $("#insp-x").onclick = () => insp.classList.remove("open");
 // ====================================================================
 const mv = $("#modview");
 $("#mv-x").onclick = () => mv.classList.remove("on");
+function improvePanel(b, module) {
+  b.innerHTML = `<div style="display:flex;gap:6px;margin-bottom:8px"><input id="imp-i" style="flex:1;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:6px;border-radius:4px" placeholder="что улучшить в «${esc(module)}»…"/><button class="ico" id="imp-go">УЛУЧШИТЬ</button></div><div id="imp-out" class="m" style="opacity:.7">Builder соберёт изменение в песочнице, прогонит eval и покажет диф — внедрение только по твоему подтверждению (с авто-откатом при провале).</div>`;
+  $("#imp-go").onclick = async () => {
+    const intent = $("#imp-i").value.trim(); if (!intent) return;
+    $("#imp-out").innerHTML = "<div class='empty'>Builder работает + eval… минуту-две</div>";
+    try { const r = await api("/api/systems/selfimprove/improve", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ module, intent }) }); renderImprove(r); }
+    catch (e) { $("#imp-out").innerHTML = "<div class='empty'>ошибка сборки</div>"; }
+  };
+}
+function renderImprove(r) {
+  const out = $("#imp-out"); if (!out) return; const ev = r.eval || {};
+  out.innerHTML = `<div class="row"><span>решение</span><span class="chip">${esc(r.decision)}</span></div>`
+    + (r.reason ? `<div class="m" style="margin:4px 0">${esc(r.reason)}</div>` : "")
+    + (ev.ok !== undefined ? `<div class="row"><span>eval (песочница)</span><span>${ev.ok ? "✓" : "✗"}</span></div>` : "")
+    + (r.diff_stat ? `<div class="m" style="white-space:pre-wrap;opacity:.7;margin-top:4px">${esc(r.diff_stat)}</div>` : "")
+    + (r.diff ? `<pre style="max-height:220px;overflow:auto;font-size:10px;border:1px solid rgba(127,127,127,.5);border-radius:4px;padding:6px;white-space:pre-wrap">${esc(r.diff)}</pre>` : "")
+    + (r.decision === "would_promote" && r.token ? `<button class="ico" id="imp-prom">ВНЕДРИТЬ (подтвердить)</button>` : "");
+  const pr = $("#imp-prom"); if (pr) pr.onclick = async () => { pr.textContent = "…"; try { const p = await api("/api/systems/selfimprove/improve/promote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: r.token }) }); toast(p.ok ? "Внедрено, ядро перезапущено" : ("Откат/отказ: " + (p.reason || ""))); if (p.ok) setTimeout(loadModules, 4000); } catch (e) { toast("Внедрение не удалось"); } };
+}
+
 function mvOpen(title, sub) { mv.classList.add("on"); $("#mv-title").textContent = title; $("#mv-sub").textContent = sub || ""; }
 function mvTabset(defs, def) {
   const tabs = $("#mv-tabs"), body = $("#mv-body"); tabs.innerHTML = ""; let active = def;
@@ -151,6 +171,7 @@ function openModule(id) {
     ["logs", "ЛОГИ", async (b) => { const d = await api(`/api/modules/${id}/logs?tail=60`); b.innerHTML = (d.logs || []).map((l) => `<div class="tlog">${esc((l.ts || "").slice(11, 19))} [${esc(l.level)}] ${esc(l.event)} ${esc(l.payload || "")}</div>`).join("") || "<div class='empty'>нет логов</div>"; }],
     ["mem", "ПАМЯТЬ", async (b) => { const d = await api(`/api/memory?module=${id}`); b.innerHTML = (d.items || []).map((x) => `<div class="row"><span>${esc(x.value)}</span><span class="chip">${esc(x.type || x.key)}</span></div>`).join("") || "<div class='empty'>нет данных</div>"; }],
     ["cfg", "НАСТРОЙКИ", async (b) => { b.innerHTML = `<div class="row"><span>включён</span><span class="chip">${m.enabled ? "да" : "нет"}</span></div><div style="margin-top:9px"><button class="ico" id="mv-tog">${m.enabled ? "ОТКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button></div>`; const t = $("#mv-tog"); if (t) t.onclick = async () => { await api(`/api/modules/${id}/${m.enabled ? "disable" : "enable"}`, { method: "POST" }); await loadModules(); openModule(id); }; }],
+    ["improve", "УЛУЧШИТЬ", async (b) => improvePanel(b, id)],
     ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:" + id, "агенту " + id + "…")],
   ], "overview");
 }
@@ -172,6 +193,12 @@ function openSelfImprove() {
       b.innerHTML = `<h5>ЭКСПЕРИМЕНТЫ</h5>` + (d.experiments.map((e) => `<div class="mvcard">${esc(e.domain)} <span class="chip">${esc(e.status)}</span><div class="m">${esc((e.started_at || "").slice(0, 19).replace("T", " "))}</div></div>`).join("") || "<div class='empty'>—</div>") + `<h5 style="margin-top:12px">ВЕРСИИ</h5>` + (d.versions.map((v) => `<div class="row"><span>${esc(v.domain || "")} v${esc(v.version ?? "")}</span><span class="chip">${v.active ? "активна" : ""}</span></div>`).join("") || "<div class='empty'>—</div>");
     }],
     ["activity", "ЛОГ КОНТУРА", async (b) => { const d = await api("/api/systems/selfimprove/board"); b.innerHTML = (d.audit || []).map((a) => `<div class="tlog">${esc((a.created_at || "").slice(11, 19))} ${esc(a.module)}.${esc(a.tool)} → ${esc(a.decision)} ${a.ok ? "ok" : "fail"}</div>`).join("") || "<div class='empty'>—</div>"; }],
+    ["tasks", "ЗАДАЧИ/ПОДЗАДАЧИ", async (b) => {
+      const d = await api("/api/systems/selfimprove/board");
+      const byH = {}; (d.experiments || []).forEach((e) => { (byH[e.hypothesis_id] = byH[e.hypothesis_id] || []).push(e); });
+      b.innerHTML = (d.hypotheses || []).slice(0, 24).map((h) => `<div class="mvcard"><b>${esc(h.summary || h.intent || h.id)}</b> <span class="chip">${esc(h.status)}</span>` + ((byH[h.id] || []).map((e) => `<div class="m">↳ эксперимент ${esc((e.id || "").slice(0, 8))} · ${esc(e.status)} · ${esc((e.started_at || "").slice(0, 16).replace("T", " "))}</div>`).join("") || "<div class='m' style='opacity:.5'>подзадач нет</div>") + `</div>`).join("") || "<div class='empty'>нет задач контура</div>";
+    }],
+    ["improve", "УЛУЧШИТЬ", async (b) => improvePanel(b, "selfimprove")],
     ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:selfimprove", "агенту самоулучшения…")],
   ], "overview");
 }
