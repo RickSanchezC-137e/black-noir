@@ -53,6 +53,13 @@ def main() -> int:
         pg.screenshot(path=os.path.join(OUT, "1b-core-ai.png"))
         pg.click("#insp-x")
 
+        # 2D schema: same core->cluster->module links, live, animated flow
+        pg.click("#sb2d"); pg.wait_for_timeout(900)
+        checks["map: 2D schema links (svg lines+nodes)"] = pg.locator("#s2svg line.lnk").count() >= 6 and pg.locator("#s2svg circle.nd").count() >= 7
+        checks["map: 2D schema ACTIVE counter"] = "ACTIVE" in pg.inner_text("#s2act")
+        pg.screenshot(path=os.path.join(OUT, "1c-schema2d.png"))
+        pg.click("#sb3d"); pg.wait_for_timeout(400)
+
         def tab(name):
             pg.click(f".tab[data-go={name}]"); pg.wait_for_timeout(700)
 

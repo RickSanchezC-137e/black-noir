@@ -259,23 +259,52 @@ function build3D() {
   })();
 }
 
-// ---------- 2D schema ----------
+// ---------- 2D schema (SVG node-link graph: same core→cluster→module links,
+//            live status, animated stroke-dashoffset flow, search + filters) ----------
+let s2q = "", s2hidden = new Set();
+const s2statusClass = (s) => s === "error" ? "err" : s === "busy" ? "busy" : s === "offline" ? "offline" : "idle";
 function render2D() {
-  const wrap = $("#schema2d"); wrap.innerHTML = "";
-  Object.entries(CLUSTERS).forEach(([cid, c]) => {
-    const col = el("div", "col"); col.appendChild(el("h4", null, c.n));
-    const here = modules.filter((m) => m.cluster === cid);
-    if (!here.length) col.appendChild(el("div", "empty", "—"));
-    here.forEach((m) => {
-      const dotc = m.status === "idle" ? "" : m.status === "busy" ? "busy" : m.status === "error" ? "err" : "idle";
-      const node = el("div", "mod", `<span class="dot ${dotc}">●</span> <b>${esc(m.display_name || m.name)}</b><div class="m">v${esc(m.version)} · ${esc(m.status)} · ${(m.tools || []).length} tools</div>`);
-      node.onclick = () => openInspector("module", m.name); col.appendChild(node);
-    });
-    wrap.appendChild(col);
+  const svg = $("#s2svg"); if (!svg) return;
+  const cx = 500, cy = 320, cnames = Object.keys(CLUSTERS), n = cnames.length;
+  // cluster filter chips (reflect s2hidden)
+  const chips = $("#s2chips"); chips.innerHTML = "";
+  cnames.forEach((cid) => {
+    const ch = el("span", "s2chip" + (s2hidden.has(cid) ? "" : " on"), cid); ch.title = CLUSTERS[cid].n;
+    ch.onclick = () => { s2hidden.has(cid) ? s2hidden.delete(cid) : s2hidden.add(cid); render2D(); };
+    chips.appendChild(ch);
   });
+  const byCl = {}; modules.forEach((m) => { (byCl[m.cluster] = byCl[m.cluster] || []).push(m); });
+  const pos = {};
+  cnames.forEach((cid, i) => { const a = -Math.PI / 2 + i * (2 * Math.PI / n); pos[cid] = { x: cx + 200 * Math.cos(a), y: cy + 200 * Math.sin(a), a }; });
+  const parts = []; let active = 0, total = 0;
+  cnames.forEach((cid) => {
+    if (s2hidden.has(cid)) return;
+    const p = pos[cid];
+    parts.push(`<line class="lnk flow" x1="${cx}" y1="${cy}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}"/>`);
+    const mods = byCl[cid] || [], k = mods.length, spread = Math.min(0.36, 1.5 / Math.max(1, k));
+    mods.forEach((m, j) => {
+      total++; if (m.status === "busy" || m.status === "idle") active++;
+      const a = p.a + (j - (k - 1) / 2) * spread, mx = p.x + 120 * Math.cos(a), my = p.y + 120 * Math.sin(a);
+      const dim = (!s2q || (m.display_name || m.name).toLowerCase().includes(s2q)) ? "" : " dim";
+      const anchor = Math.cos(a) < -0.25 ? "end" : Math.cos(a) > 0.25 ? "start" : "middle";
+      const tx = mx + 11 * Math.cos(a), ty = my + 11 * Math.sin(a);
+      parts.push(`<line class="lnk flow${dim}" x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${mx.toFixed(1)}" y2="${my.toFixed(1)}"/>`);
+      parts.push(`<circle class="nd glow ${s2statusClass(m.status)}${dim}" data-mod="${esc(m.name)}" cx="${mx.toFixed(1)}" cy="${my.toFixed(1)}" r="6"><title>${esc(m.display_name || m.name)} · ${esc(m.status)}</title></circle>`);
+      parts.push(`<text class="${dim.trim()}" x="${tx.toFixed(1)}" y="${(ty + 3).toFixed(1)}" text-anchor="${anchor}">${esc(m.display_name || m.name)}</text>`);
+    });
+    parts.push(`<circle class="nd glow" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="11"><title>${esc(CLUSTERS[cid].n)}</title></circle>`);
+    parts.push(`<text class="cl" x="${p.x.toFixed(1)}" y="${(p.y - 16).toFixed(1)}" text-anchor="middle">${esc(cid)}</text>`);
+  });
+  parts.push(`<circle class="nd glow" data-core="1" cx="${cx}" cy="${cy}" r="22"/>`);
+  parts.push(`<text class="cl" x="${cx}" y="${cy + 4}" text-anchor="middle">NOIR</text>`);
+  svg.innerHTML = parts.join("");
+  svg.querySelectorAll("[data-mod]").forEach((c) => c.onclick = () => openInspector("module", c.getAttribute("data-mod")));
+  const ce = svg.querySelector("[data-core]"); if (ce) ce.onclick = () => openInspector("core");
+  $("#s2act").textContent = total ? `${active}/${total} ACTIVE` : "нет модулей";
 }
-$("#sb3d").onclick = () => { $("#sb3d").classList.add("on"); $("#sb2d").classList.remove("on"); $("#schema2d").classList.add("hidden"); $("#labels").classList.remove("hidden"); if (window.__resize) window.__resize(); };
-$("#sb2d").onclick = () => { $("#sb2d").classList.add("on"); $("#sb3d").classList.remove("on"); $("#schema2d").classList.remove("hidden"); $("#labels").classList.add("hidden"); render2D(); };
+$("#s2search").addEventListener("input", (e) => { s2q = e.target.value.trim().toLowerCase(); render2D(); });
+$("#sb3d").onclick = () => { $("#sb3d").classList.add("on"); $("#sb2d").classList.remove("on"); $("#schema2d").classList.add("hidden"); $("#labels").classList.remove("hidden"); $("#maphint").style.display = ""; if (window.__resize) window.__resize(); };
+$("#sb2d").onclick = () => { $("#sb2d").classList.add("on"); $("#sb3d").classList.remove("on"); $("#schema2d").classList.remove("hidden"); $("#labels").classList.add("hidden"); $("#maphint").style.display = "none"; render2D(); };
 
 // ====================================================================
 //  TASKS — kanban + inspector ИНФО/ЛОГ/ВЕТВЬ/ЧАТ (live)
