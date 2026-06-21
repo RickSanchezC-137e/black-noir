@@ -1,0 +1,10 @@
+# /etc/systemd/system/noir-night.timer — continuous night loop every 20 min
+[Unit]
+Description=Black Noir night autonomy cadence
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=20min
+RandomizedDelaySec=90
+Persistent=true
+[Install]
+WantedBy=timers.target

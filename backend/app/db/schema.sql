@@ -81,6 +81,17 @@ CREATE TABLE IF NOT EXISTS si_versions (
     rollback_token TEXT NOT NULL UNIQUE, active INTEGER NOT NULL, created_at TEXT NOT NULL,
     PRIMARY KEY (domain, version)
 );
+CREATE TABLE IF NOT EXISTS si_budget_ledger (
+    day TEXT PRIMARY KEY, tokens_limit INTEGER NOT NULL, requests_limit INTEGER NOT NULL,
+    tokens_used INTEGER NOT NULL DEFAULT 0, requests_used INTEGER NOT NULL DEFAULT 0,
+    builder_runs INTEGER NOT NULL DEFAULT 0, adopt_clones INTEGER NOT NULL DEFAULT 0,
+    paused INTEGER NOT NULL DEFAULT 0
+);
+-- adoption registry mirror (verdicts also written to 11_adoption.md)
+CREATE TABLE IF NOT EXISTS si_adoptions (
+    repo TEXT PRIMARY KEY, capability TEXT, cluster TEXT, verdict TEXT, license TEXT,
+    security TEXT, eval TEXT, status TEXT, decided_at TEXT
+);
 
 -- Ideas (C4 idea bot / generator)
 CREATE TABLE IF NOT EXISTS ideas (

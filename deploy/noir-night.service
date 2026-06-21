@@ -1,0 +1,10 @@
+# /etc/systemd/system/noir-night.service
+[Unit]
+Description=Black Noir night autonomy tick (adopt + self-improve, budget-gated)
+After=noir-core.service
+Requires=noir-core.service
+[Service]
+Type=oneshot
+User=jarvis
+Group=jarvis
+ExecStart=/usr/bin/curl -fsS -m 280 -X POST http://127.0.0.1:8000/api/systems/selfimprove/night

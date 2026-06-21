@@ -9,6 +9,30 @@ from app.core import selfimprove
 router = APIRouter(prefix="/api/systems/selfimprove")
 
 
+@router.get("/budget")
+async def budget_status():
+    from app.core import budget
+    return budget.status()
+
+
+@router.get("/adoptions")
+async def adoptions():
+    from app.core import adoption
+    return {"adoptions": adoption.list_adoptions()}
+
+
+@router.post("/canary")
+async def run_canary():
+    from app.core import night
+    return await night.canary()
+
+
+@router.post("/night")
+async def night_tick():
+    from app.core import night
+    return await night.night_tick()
+
+
 class RunIn(BaseModel):
     intent: str
     target_module: str = "mcp_fs"

@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     whisper_device: str = "auto"
     piper_voice: str = "ru_RU-dmitri-medium.onnx"
 
+    # Self-improvement night budget (09_self_improvement.md §9)
+    selfimprove_daily_budget_tokens: int = 1_500_000
+    selfimprove_daily_budget_requests: int = 300
+    selfimprove_max_builder_runs: int = 20
+    selfimprove_max_adopt_clones: int = 8
+    selfimprove_night_enabled: int = 1
+
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.chroma_dir.mkdir(parents=True, exist_ok=True)

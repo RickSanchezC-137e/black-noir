@@ -1,0 +1,8 @@
+# /etc/systemd/system/noir-morning-report.timer — daily 08:00 UTC
+[Unit]
+Description=Black Noir morning report cadence
+[Timer]
+OnCalendar=*-*-* 08:00:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target

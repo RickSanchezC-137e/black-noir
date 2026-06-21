@@ -1,0 +1,16 @@
+manifest_version: 1
+module_id: mcp_glances
+cluster: C6
+display_name: "Host Metrics (glances)"
+description: "Live host metrics (per-core CPU, RAM, disk, net) via the glances engine."
+version: 1.0.0
+runtime: in-process
+namespace: m_mcp_glances__
+tools:
+  - { name: glances.snapshot, action_class: read, description: "Snapshot live host metrics" }
+capabilities:
+  filesystem: read
+  network: none
+  action_classes: [read]
+  origin: "github.com/nicolargo/glances"
+  license: "LGPL-3.0 (engine adopted as lib)"

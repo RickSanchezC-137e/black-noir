@@ -1,0 +1,10 @@
+# /etc/systemd/system/noir-morning-report.service
+[Unit]
+Description=Black Noir morning report -> Telegram
+After=noir-core.service
+[Service]
+Type=oneshot
+User=jarvis
+Group=jarvis
+WorkingDirectory=/home/jarvis/noir/backend
+ExecStart=/home/jarvis/noir/backend/.venv/bin/python -m app.bot.morning_report
