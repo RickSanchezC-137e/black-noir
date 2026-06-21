@@ -1,0 +1,12 @@
+id: improve_uptime_endpoint
+suite: improve
+input: "GET /api/systems/uptime returns core uptime in seconds"
+improve_intent: "Add a FastAPI route GET /api/systems/uptime in backend/app/api/core.py that returns JSON {uptime_seconds: <float>} computed from the module-level _START timestamp already defined in that file (time.time() - _START). Minimal additive change, mirror existing routes."
+request:
+  method: GET
+  path: /api/systems/uptime
+expect:
+  status: 200
+  contains: ["uptime_seconds"]
+  max_latency_ms: 2000
+  violations: 0

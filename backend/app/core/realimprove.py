@@ -214,16 +214,84 @@ async def rollback(token: str) -> dict:
     return {"ok": True, "rolled_back": token}
 
 
+def _failing_cases(base: str = "http://127.0.0.1:8000") -> list[dict]:
+    """Run the full eval against `base` and return the failing cases (spec gaps)."""
+    import yaml
+    cmd = [sys.executable, str(REPO / "eval" / "runner.py"), "--suite", "all", "--base", base]
+    out = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO / "eval"), timeout=200).stdout
+    fail_ids = []
+    for line in out.splitlines():
+        if line.strip().startswith("[FAIL]"):
+            parts = line.split()
+            if len(parts) >= 3:
+                fail_ids.append(parts[2])
+    cases = {}
+    for f in (REPO / "eval" / "cases").glob("*.yaml"):
+        for doc in yaml.safe_load_all(f.read_text()):
+            if doc and doc.get("id") in fail_ids:
+                cases[doc["id"]] = doc
+    return [cases[i] for i in fail_ids if i in cases]
+
+
+def _derive_intent(case: dict) -> str:
+    if case.get("improve_intent"):
+        return case["improve_intent"]
+    req = case.get("request") or (case.get("steps") or [{}])[0]
+    exp = case.get("expect", {})
+    return (f"Implement the backend change so eval case '{case['id']}' passes. "
+            f"Goal: {case.get('input','')}. Endpoint: {req.get('method','GET')} {req.get('path','')}. "
+            f"Response must satisfy: {exp}. Make a minimal, additive change consistent with the "
+            f"existing FastAPI routers in backend/app/api/. Do not touch governor, secrets, or constitution.")
+
+
+async def autonomous_tick() -> dict:
+    """One autonomous self-improvement step: find a spec gap (failing eval case) and close it
+    through the safety gate, self-deploying to live with owner notification + auto-rollback.
+    If there are no gaps, do nothing (the system matches its spec)."""
+    ok, why = budget.can_spend()
+    if not ok:
+        return {"improved": False, "reason": why}
+    fails = _failing_cases()
+    # ignore non-deterministic / external-cost suites in the autonomous loop
+    fails = [c for c in fails if c.get("suite") not in ("chat", "ideas", "bot", "perception", "memory")]
+    if not fails:
+        return {"improved": False, "reason": "no eval gaps — system matches its spec"}
+    case = fails[0]
+    intent = _derive_intent(case)
+    r = await build_real(intent, domain="core", apply_to_live=True)
+    await _notify_owner(case, r)
+    return {"improved": r.get("decision") == "promote", "case": case["id"], **r}
+
+
+async def _notify_owner(case: dict, r: dict) -> None:
+    try:
+        from app.core import telegram
+        d = r.get("decision")
+        emoji = {"promote": "✅", "rolled_back": "↩️", "KILL": "🛑", "reject": "⏭"}.get(d, "ℹ️")
+        msg = (f"{emoji} Автономное самоулучшение: {case['id']}\n"
+               f"Вердикт: {d} — {r.get('reason','')}\n"
+               f"improve {r.get('improve_champion_vs_challenger','')}"
+               + (f"\nОткат: {r.get('rollback_token')}" if r.get("rollback_token") else ""))
+        await telegram.notify_owner(msg)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 if __name__ == "__main__":
-    # Run as a STANDALONE process (not inside the core it restarts):
-    #   python -m app.core.realimprove build "<intent>"
+    # STANDALONE process (not inside the core it restarts):
+    #   python -m app.core.realimprove build "<intent>" [--apply]
+    #   python -m app.core.realimprove auto          # autonomous tick (self-deploys gaps)
     #   python -m app.core.realimprove rollback <token>
     import asyncio
     import json as _json
 
-    if len(sys.argv) >= 3 and sys.argv[1] == "build":
-        print(_json.dumps(asyncio.run(build_real(sys.argv[2])), ensure_ascii=False, indent=2))
+    if len(sys.argv) >= 2 and sys.argv[1] == "auto":
+        print(_json.dumps(asyncio.run(autonomous_tick()), ensure_ascii=False, indent=2, default=str))
+    elif len(sys.argv) >= 3 and sys.argv[1] == "build":
+        apply = "--apply" in sys.argv
+        print(_json.dumps(asyncio.run(build_real(sys.argv[2], apply_to_live=apply)),
+                          ensure_ascii=False, indent=2, default=str))
     elif len(sys.argv) >= 3 and sys.argv[1] == "rollback":
         print(_json.dumps(asyncio.run(rollback(sys.argv[2])), ensure_ascii=False))
     else:
-        print("usage: python -m app.core.realimprove build '<intent>' | rollback <token>")
+        print("usage: realimprove auto | build '<intent>' [--apply] | rollback <token>")

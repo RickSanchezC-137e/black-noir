@@ -66,6 +66,11 @@ async def version():
             "python": sys.version.split()[0]}
 
 
+@router.get("/systems/uptime")
+async def uptime():
+    return {"uptime_seconds": time.time() - _START}
+
+
 @router.get("/systems/metrics")
 async def metrics():
     """Real host metrics (Rule 6/7) — no demo numbers."""
