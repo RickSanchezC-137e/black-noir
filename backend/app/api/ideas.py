@@ -30,6 +30,12 @@ class RejectIn(BaseModel):
     reason: str = ""
 
 
+class AdoptIn(BaseModel):
+    repo: str                       # owner/name or full GitHub URL
+    capability: str = ""
+    cluster: str = "C6"
+
+
 @router.get("")
 async def list_ideas(limit: int = 20):
     return {"ideas": await ideas_svc.list_ideas(limit)}
@@ -88,6 +94,21 @@ async def accept(idea_id: str):
 async def reject(idea_id: str, body: RejectIn | None = None):
     await _set_status(idea_id, "rejected")
     return {"ok": True}
+
+
+@router.post("/adopt")
+async def adopt_repo(body: AdoptIn):
+    """Analyze a GitHub repo (clone+license+security+eval) and adopt if worthy."""
+    from app.core import adoption
+    repo = body.repo.strip().replace("https://github.com/", "").replace(".git", "").strip("/")
+    rep = await adoption.adopt(repo, capability=body.capability, cluster=body.cluster)
+    # flag overlap with an existing module of the same cluster (compare-vs-ours)
+    try:
+        from app.core.modules_runtime import manager
+        rep["overlaps"] = [m["name"] for m in manager.list() if m.get("cluster") == body.cluster]
+    except Exception:  # noqa: BLE001
+        rep["overlaps"] = []
+    return rep
 
 
 @router.get("/bot")

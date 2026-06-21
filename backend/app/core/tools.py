@@ -36,6 +36,10 @@ SCHEMAS = [
      "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
     {"name": "create_idea", "description": "Завести идею на разбор (контур самоулучшения).",
      "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+    {"name": "adopt_repo", "description": "Разобрать GitHub-репозиторий (лицензия+безопасность+eval) и внедрить, если стоящий и совместимый.",
+     "input_schema": {"type": "object", "properties": {
+         "repo": {"type": "string", "description": "owner/name или URL"},
+         "capability": {"type": "string"}, "cluster": {"type": "string"}}, "required": ["repo"]}},
 ]
 
 
@@ -102,6 +106,14 @@ async def run(name: str, inp: dict) -> str:
                     await db.commit()
                 return f"идея {iid[:8]} заведена на разбор"
             return await _governed("create_idea", "local_write", _do)
+
+        if name == "adopt_repo":
+            from app.core import adoption
+            repo = (inp.get("repo") or "").replace("https://github.com/", "").replace(".git", "").strip("/")
+            rep = await adoption.adopt(repo, capability=inp.get("capability", ""), cluster=inp.get("cluster", "C6"))
+            return json.dumps({"repo": repo, "verdict": rep.get("verdict"), "reason": rep.get("reason"),
+                               "license": rep.get("license"), "security": (rep.get("security") or {}).get("safe"),
+                               "module_id": rep.get("module_id")}, ensure_ascii=False)
 
         return f"[неизвестный инструмент: {name}]"
     except Exception as e:  # noqa: BLE001 — surface error to the model, don't crash the turn

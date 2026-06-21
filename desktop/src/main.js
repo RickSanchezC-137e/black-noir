@@ -376,7 +376,23 @@ function openIdeaInspector(i) {
 }
 $("#genidea").onclick = async () => { $("#genidea").textContent = "…"; try { await api("/api/ideas/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ n: 2 }) }); await loadIdeas(); } catch (e) {} $("#genidea").textContent = "+ СГЕНЕРИРОВАТЬ"; };
 async function intake(source, value) { if (!value.trim()) return; try { await api("/api/ideas/intake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, value }) }); toast("Принято в разбор"); await loadIdeas(); } catch (e) { toast("Не удалось принять"); } }
-$("#iadd").onclick = () => { intake($("#isrc").value, $("#ival").value); $("#ival").value = ""; };
+async function adoptRepo(repo) {
+  if (!repo.trim()) return; toast("Разбираю репозиторий…");
+  try {
+    const r = await api("/api/ideas/adopt", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repo, cluster: "C6" }) });
+    const lic = r.license || {}, secSafe = !r.security || r.security.safe !== false;
+    drawer("РАЗБОР РЕПО"); inspTabs.innerHTML = "";
+    inspBody.innerHTML = `<div style="margin-bottom:8px">${esc(r.repo || repo)}</div>`
+      + `<div class="row"><span>вердикт</span><span class="chip">${esc(r.verdict)}</span></div>`
+      + `<div class="row"><span>лицензия</span><span>${esc(lic.license || "?")} ${lic.compatible ? "✓" : "✗"}</span></div>`
+      + `<div class="row"><span>безопасность</span><span>${secSafe ? "чисто" : "найдены риски"}</span></div>`
+      + (r.module_id ? `<div class="row"><span>модуль</span><span class="chip">${esc(r.module_id)}</span></div>` : "")
+      + (r.reason ? `<div class="m" style="margin-top:6px">${esc(r.reason)}</div>` : "")
+      + (r.overlaps && r.overlaps.length ? `<div class="m" style="margin-top:6px;opacity:.6">в кластере уже: ${esc(r.overlaps.join(", "))}</div>` : "");
+    toast("Репо: " + r.verdict);
+  } catch (e) { toast("Не удалось разобрать репо"); }
+}
+$("#iadd").onclick = () => { const src = $("#isrc").value, val = $("#ival").value; $("#ival").value = ""; if (src === "repo") adoptRepo(val); else intake(src, val); };
 $("#ival").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#iadd").click(); });
 $("#ifile").onclick = () => $("#ideafileinp").click();
 $("#ideafileinp").onchange = (e) => { for (const f of e.target.files) intake("file", f.name); e.target.value = ""; };
