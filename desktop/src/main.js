@@ -5,6 +5,10 @@ import * as THREE from "three";
 
 const params = new URLSearchParams(location.search);
 const isTauri = !!window.__TAURI_INTERNALS__ || !!window.__TAURI__;
+// PWA: register service worker so the app is installable on phone/tablet home screen.
+if (!isTauri && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
 const API = (params.get("api") || window.NOIR_API_BASE || (window.__VITE_API_BASE__) ||
   (isTauri ? "https://jarvisgod.duckdns.org" : "")).replace(/\/$/, "");   // "" = same-origin (browser)
 const WS = API ? API.replace(/^http/, "ws") : (location.origin.replace(/^http/, "ws"));
@@ -830,7 +834,7 @@ function renderChat() {
   (chGet(ch).hist || []).forEach((m) => appendMsg(m.role, m.text));
   if (!log.children.length) appendMsg("sys", ch === "mediator"
     ? "Передатчик: соберу твои реплики в одну задачу ядру и верну суть кратко."
-    : ch === "claude_code" ? "Чат с Claude Code (read-only)." : "Прямой чат с ядром.");
+    : ch === "claude_code" ? "Чат с Claude Code — видно его работу вживую: вызовы инструментов, чтение файлов, затем ответ. Может думать 1–4 мин." : "Прямой чат с ядром.");
 }
 function renderDrafts() {
   const d = $("#cdraft"); d.innerHTML = "";
@@ -858,8 +862,9 @@ async function sendChat() {
   if (atts.length) text += (text ? "\n" : "") + "[вложения: " + atts.map((a) => a.name).join(", ") + "]";
   drafts = []; renderDrafts(); atts = []; renderAtts();
   appendMsg("me", "» " + text); pushHist(ch, "me", "» " + text);
-  const bubble = appendMsg("ai", "…");
   const st = chGet(ch);
+  if (ch === "claude_code") { await sendCC(text, st); return; }
+  const bubble = appendMsg("ai", "…");
   try {
     const r = await api("/api/chat", { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ message: text, agent: ch, session_id: st.sid || null, cc_session: st.cc || null }) });
@@ -871,6 +876,43 @@ async function sendChat() {
   } catch (e) { bubble.textContent = "[нет связи с ядром]"; bubble.className = "msg sys"; }
   $("#chatlog").scrollTop = 1e9;
 }
+// Claude Code channel: stream live tool activity (SSE over POST) so you SEE it work.
+async function sendCC(text, st) {
+  const head = appendMsg("ai", "● CLAUDE CODE работает…"); head.classList.add("ccwork");
+  const logbox = el("div", "cclog"); $("#chatlog").appendChild(logbox);
+  const t0 = Date.now();
+  const tick = setInterval(() => { if (!head.dataset.done) head.textContent = "● CLAUDE CODE работает… " + Math.round((Date.now() - t0) / 1000) + "с"; }, 1000);
+  const addline = (s, cls) => { const e = el("div", "ccline " + (cls || ""), esc(s)); logbox.appendChild(e); $("#chatlog").scrollTop = 1e9; return e; };
+  let finalText = "";
+  try {
+    const resp = await fetch(API + "/api/chat/cc/stream", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: text, agent: "claude_code", session_id: st.sid || null, cc_session: st.cc || null }) });
+    if (!resp.ok || !resp.body) throw new Error("http " + resp.status);
+    const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const line = buf.slice(0, idx).replace(/^data:\s?/, "").trim(); buf = buf.slice(idx + 2);
+        if (!line) continue;
+        let ev; try { ev = JSON.parse(line); } catch (e) { continue; }
+        if (ev.t === "start") { st.sid = ev.session_id; }
+        else if (ev.t === "init") { if (ev.cc_session) st.cc = ev.cc_session; addline("⚙ запуск · " + (ev.model || ""), "dim"); }
+        else if (ev.t === "tool") { addline("🔧 " + (ev.name || "") + (ev.input ? " · " + ev.input : ""), "tool"); }
+        else if (ev.t === "tool_done") { const l = logbox.lastChild; if (l) l.classList.add("ok"); }
+        else if (ev.t === "text" && ev.text) { addline("· " + ev.text, "dim"); }
+        else if (ev.t === "done") { finalText = ev.text || ""; if (ev.cc_session) st.cc = ev.cc_session; }
+        else if (ev.t === "error") { addline(ev.text || "ошибка", "err"); }
+      }
+    }
+  } catch (e) { addline("[обрыв связи со стримом Claude Code]", "err"); }
+  clearInterval(tick); head.dataset.done = "1";
+  head.textContent = "✓ CLAUDE CODE · " + Math.round((Date.now() - t0) / 1000) + "с";
+  if (finalText) { appendMsg("ai", finalText); pushHist(ch, "ai", finalText); try { faceSpeak(0.7); } catch (e) {} }
+  chSet(ch, st); $("#chatlog").scrollTop = 1e9;
+}
+
 $("#send").onclick = sendChat;
 $("#msg").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
 switchChannel(ch);

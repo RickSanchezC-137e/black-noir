@@ -1,11 +1,13 @@
 """/api/chat (CANON §3, contract {reply, session_id})."""
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 
 import aiosqlite
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.config import settings
@@ -253,6 +255,36 @@ async def chat(body: ChatIn):
     await _save(sid, "assistant", out.reply)
     await _maybe_summarize(sid)
     return out
+
+
+@router.post("/chat/cc/stream")
+async def chat_cc_stream(body: ChatIn):
+    """Live Claude Code channel: stream its tool activity + reply as Server-Sent Events.
+    Each line is `data: {json}\\n\\n` with t in {start,init,text,tool,tool_done,done,error}.
+    Persists the user msg + final reply to the session so /chat/history stays complete."""
+    sid = body.session_id or str(uuid.uuid4())
+    await _ensure_session(sid)
+    await _save(sid, "user", body.message)
+    await memory.remember(body.message, source="chat:claude_code", role="user")
+
+    async def gen():
+        yield f"data: {json.dumps({'t': 'start', 'session_id': sid}, ensure_ascii=False)}\n\n"
+        final = ""
+        try:
+            async for ev in claude_code.stream(body.message, resume=body.cc_session):
+                if ev.get("t") == "done":
+                    final = ev.get("text") or ""
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        except Exception as e:  # noqa: BLE001
+            yield f"data: {json.dumps({'t': 'error', 'text': str(e)[:200]}, ensure_ascii=False)}\n\n"
+        finally:
+            if final:
+                await _save(sid, "assistant", final)
+                await _maybe_summarize(sid)
+            yield f"data: {json.dumps({'t': 'end'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.get("/chat/history")

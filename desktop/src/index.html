@@ -2,8 +2,17 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <title>Black Noir</title>
+<!-- PWA / home-screen app -->
+<link rel="manifest" href="/manifest.webmanifest"/>
+<meta name="theme-color" content="#04150e"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Noir"/>
+<link rel="apple-touch-icon" href="/icon-512.png"/>
+<link rel="icon" type="image/png" href="/icon-512.png"/>
 <style>
 /* Pip-Boy CRT HUD — view per desktop_reference/hud_reference.html. Theme via #px[.gold]. */
 :root{--mono:"JetBrains Mono",Consolas,monospace}
@@ -87,6 +96,11 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 /* chat */
 #chatlog{position:absolute;top:38px;left:14px;right:14px;bottom:52px;overflow:auto;border:1px solid rgba(127,127,127,.55);border-radius:6px;padding:10px;font-size:12px}
 .msg{margin:5px 0}.msg.me{color:currentColor;opacity:.85}.msg.ai{opacity:1}.msg.sys{opacity:.5}
+.msg.ccwork{opacity:.9;letter-spacing:1px}
+.cclog{border-left:2px solid rgba(127,127,127,.4);margin:2px 0 8px 4px;padding:2px 0 2px 9px}
+.ccline{font-size:10.5px;opacity:.8;margin:2px 0;white-space:pre-wrap;word-break:break-word}
+.ccline.tool{opacity:.95}.ccline.tool.ok{opacity:.55}
+.ccline.dim{opacity:.5;font-style:italic}.ccline.err{color:#ff7a6b;opacity:1}
 #chatin{position:absolute;left:110px;right:14px;bottom:12px;display:flex;gap:6px}
 #chatin input{flex:1;background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:7px;border-radius:4px}
 /* systems */
@@ -177,6 +191,45 @@ html,body{margin:0;height:100%;background:#000;font-family:var(--mono)}
 .mvkb h4{margin:0 0 8px;opacity:.75;font-size:11px;letter-spacing:1px}
 .mvcard{border:1px solid rgba(127,127,127,.55);border-radius:5px;padding:7px 9px;margin-bottom:7px;font-size:11px}
 .mvcard .m{font-size:10px;opacity:.6;margin-top:3px}
+/* ===== Responsive (phone + tablet) + PWA ===== */
+@supports (height:100dvh){#px{height:100dvh}}
+@media (max-width:1024px){
+  .cols{grid-template-columns:repeat(3,1fr)}
+  .kb{grid-template-columns:repeat(2,1fr)}
+  .ideacols{grid-template-columns:repeat(2,1fr)}
+  .mvkb{grid-template-columns:repeat(2,1fr)}
+  .s2bar{max-width:calc(100% - 24px)}
+  #insp{width:300px}
+}
+@media (max-width:640px){
+  .hd{flex-wrap:wrap;gap:8px;padding:7px 10px}
+  .tabs{order:3;flex:0 0 100%;overflow-x:auto;flex-wrap:nowrap;gap:16px;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .tab{flex:0 0 auto;white-space:nowrap;padding:3px 0}
+  .hd .ico,.hd .bell{flex:0 0 auto}
+  .cols{grid-template-columns:repeat(2,1fr);gap:8px;padding:10px}
+  .kb,.ideacols,.mvkb,.syswrap,.prof{grid-template-columns:1fr}
+  .syswrap,.prof{padding:10px}
+  .kbscroll{max-height:none}
+  #insp{width:100%;border-left:0}
+  .notifs{right:8px;left:8px;width:auto}
+  /* phone chat: hide floating companion → full-width input */
+  .vbro,.vbshow{display:none!important}
+  #chatin,.atts,.cdraft{left:14px}
+  .atts,.cdraft{right:14px}
+  #facewin{left:8px;right:8px;width:auto}
+  #facewin canvas,#facewin #vimg{height:170px}
+  .chsw{overflow-x:auto;flex-wrap:nowrap}
+  .chtab{flex:0 0 auto;white-space:nowrap}
+  .sub{flex-wrap:wrap}
+  /* map search/filter bar → bottom strip so it doesn't collide with cluster buttons */
+  .s2bar{top:auto;bottom:44px;left:8px;right:8px;max-width:none;flex-wrap:wrap;background:rgba(0,0,0,.55);border-radius:6px;padding:5px}
+  .s2bar input{width:100%}
+  .mvtabs,.itabs,.intake{overflow-x:auto}
+}
+@media (pointer:coarse){
+  .tab,.sb,.s2chip,.mvtab,.it,.chtab,.ico,.kbmore{padding-top:7px;padding-bottom:7px}
+  .mod,.tk,.idea,.mvcard{padding-top:9px;padding-bottom:9px}
+}
 </style>
 </head>
 <body>
