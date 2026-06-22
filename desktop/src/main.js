@@ -471,11 +471,46 @@ function fitVB() {
 }
 function setupPanZoom() {
   const svg = $("#s2svg"); if (!svg || svg.__pz) return; svg.__pz = 1;
-  let pan = false, sx, sy, ox, oy;
-  svg.addEventListener("pointerdown", (e) => { if (e.target.closest(".nd")) return; pan = true; sx = e.clientX; sy = e.clientY; ox = VB.x; oy = VB.y; try { svg.setPointerCapture(e.pointerId); } catch (_) {} });
-  svg.addEventListener("pointermove", (e) => { if (!pan) return; const r = svg.getBoundingClientRect(); VB.x = ox - (e.clientX - sx) * VB.w / r.width; VB.y = oy - (e.clientY - sy) * VB.h / r.height; vbAuto = false; applyVB(); });
-  svg.addEventListener("pointerup", (e) => { pan = false; try { svg.releasePointerCapture(e.pointerId); } catch (_) {} });
-  svg.addEventListener("wheel", (e) => { e.preventDefault(); vbAuto = false; const r = svg.getBoundingClientRect(); const mx = VB.x + (e.clientX - r.left) / r.width * VB.w, my = VB.y + (e.clientY - r.top) / r.height * VB.h; const f = e.deltaY > 0 ? 1.1 : 0.9; VB.w = Math.max(120, Math.min(3000, VB.w * f)); VB.h = Math.max(80, Math.min(2000, VB.h * f)); VB.x = mx - (e.clientX - r.left) / r.width * VB.w; VB.y = my - (e.clientY - r.top) / r.height * VB.h; applyVB(); }, { passive: false });
+  const pts = new Map();              // active pointers: id -> {x,y}
+  let pan = false, sx, sy, ox, oy;    // 1-finger pan baseline
+  let pinch = null;                   // last 2-finger frame {dist,cx,cy}
+  const toWorld = (cx, cy, r) => ({ x: VB.x + (cx - r.left) / r.width * VB.w, y: VB.y + (cy - r.top) / r.height * VB.h });
+  const zoomAt = (cx, cy, f, r) => { vbAuto = false; const w0 = toWorld(cx, cy, r);
+    VB.w = Math.max(120, Math.min(3000, VB.w * f)); VB.h = Math.max(80, Math.min(2000, VB.h * f));
+    VB.x = w0.x - (cx - r.left) / r.width * VB.w; VB.y = w0.y - (cy - r.top) / r.height * VB.h; applyVB(); };
+
+  svg.addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".nd") && pts.size === 0) return;   // single tap on a node opens it
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+    if (pts.size === 1) { pan = true; sx = e.clientX; sy = e.clientY; ox = VB.x; oy = VB.y; }
+    else { pan = false; pinch = null; }                      // 2nd finger down → pinch begins
+  });
+  svg.addEventListener("pointermove", (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const r = svg.getBoundingClientRect();
+    if (pts.size >= 2) {                                      // pinch-zoom + two-finger pan
+      const [a, b] = [...pts.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      if (pinch && dist > 0) zoomAt(cx, cy, pinch.dist / dist, r);
+      pinch = { dist, cx, cy };
+      return;
+    }
+    if (pan) { VB.x = ox - (e.clientX - sx) * VB.w / r.width; VB.y = oy - (e.clientY - sy) * VB.h / r.height; vbAuto = false; applyVB(); }
+  });
+  const up = (e) => {
+    pts.delete(e.pointerId); try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (pts.size < 2) pinch = null;
+    if (pts.size === 1) { const p = [...pts.values()][0]; pan = true; sx = p.x; sy = p.y; ox = VB.x; oy = VB.y; }
+    else if (pts.size === 0) pan = false;
+  };
+  svg.addEventListener("pointerup", up);
+  svg.addEventListener("pointercancel", up);
+  svg.addEventListener("wheel", (e) => { e.preventDefault(); const r = svg.getBoundingClientRect(); zoomAt(e.clientX, e.clientY, e.deltaY > 0 ? 1.1 : 0.9, r); }, { passive: false });
+  // double-tap to zoom in (touch convenience)
+  let lastTap = 0;
+  svg.addEventListener("pointerup", (e) => { if (e.pointerType !== "touch") return; const now = e.timeStamp; if (now - lastTap < 300) { const r = svg.getBoundingClientRect(); zoomAt(e.clientX, e.clientY, 0.6, r); } lastTap = now; });
 }
 const s2statusClass = (s) => s === "error" ? "err" : s === "busy" ? "busy" : s === "offline" ? "offline" : "live";
 
