@@ -73,6 +73,15 @@ async def night_tick() -> dict:
             budget.charge(requests=1, builder=1)
             out["actions"].append({"factory": fr.get("verdict") or fr.get("error"), "module": fr.get("module")})
 
+    # 5) Task runner: execute one pending task off the core (Governor-gated)
+    ok5, _ = budget.can_spend()
+    if ok5:
+        from app.core import runner
+        tr = await runner.tick()
+        if tr.get("ran") is not False:
+            budget.charge(requests=1)
+            out["actions"].append({"task_run": tr.get("id"), "ok": tr.get("ok")})
+
     out["budget"] = budget.status()
     return out
 

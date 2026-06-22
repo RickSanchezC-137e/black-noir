@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+    xai_api_key: str = ""
+    xai_model: str = "grok-2-latest"
+    mistral_api_key: str = ""
+    mistral_model: str = "mistral-large-latest"
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
     council_timeout_s: float = 30.0
 
     # Search / integrations

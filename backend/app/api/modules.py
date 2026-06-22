@@ -66,6 +66,12 @@ async def factory_tick():
     return await module_factory.tick()
 
 
+@router.get("/factory/build/{bid}")
+async def factory_build_detail(bid: str):
+    from app.core import module_factory
+    return module_factory.get_build(bid)
+
+
 @router.post("/factory/promote")
 async def factory_promote(body: FactoryPromoteIn):
     from app.core import adoption

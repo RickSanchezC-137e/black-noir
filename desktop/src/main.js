@@ -218,23 +218,63 @@ async function openModuleImprove(id, backFn) {
   mvDetail(html, backFn);
   improvePanel($("#imp-host"), id);
 }
+async function renderAiList(b) {
+  const r = await api("/api/core/ai"); const list = r.ai || [];
+  b.innerHTML = `<div style="margin-bottom:8px"><button class="ico" id="ai-add">+ ДОБАВИТЬ ИИ</button></div>`
+    + list.map((a) => `<div class="mvcard" data-ai="${esc(a.id)}" style="cursor:pointer"><b>${esc(a.name)}</b> <span class="chip">${esc(a.role)}</span> <span class="chip">${a.active ? "вкл" : "выкл"}</span><div class="m">${esc(a.model)}</div></div>`).join("");
+  const ad = $("#ai-add"); if (ad) ad.onclick = async () => { const n = prompt("Имя нового ИИ:"); if (!n) return; await api("/api/core/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: n }) }); toast("ИИ добавлен"); renderAiList(b); };
+  b.querySelectorAll("[data-ai]").forEach((c) => c.onclick = () => openAiDetail(c.getAttribute("data-ai"), () => renderAiList(b)));
+}
+async function openAiDetail(aid, backFn) {
+  const r = await api("/api/core/ai"); const a = (r.ai || []).find((x) => x.id === aid) || { id: aid };
+  const sid = "agent:ai:" + aid;
+  const ip = "background:rgba(0,0,0,.4);border:1px solid currentColor;color:currentColor;font-family:var(--mono);padding:5px;border-radius:4px";
+  const html = `<h5>НАСТРОЙКИ</h5>`
+    + `<div class="row"><span>имя</span><input id="ai-name" value="${esc(a.name || "")}" style="${ip}"/></div>`
+    + `<div class="row"><span>роль</span><input id="ai-role" value="${esc(a.role || "")}" style="${ip}"/></div>`
+    + `<div class="row"><span>модель</span><input id="ai-model" value="${esc(a.model || "")}" style="${ip}"/></div>`
+    + `<div class="row"><span>активен</span><input type="checkbox" id="ai-act" ${a.active ? "checked" : ""}/></div>`
+    + `<h5 style="margin-top:8px">ПЕРСОНА / ИНСТРУКЦИЯ</h5><textarea id="ai-sys" style="${ip};width:100%;min-height:70px">${esc(a.system || "")}</textarea>`
+    + `<div style="margin-top:8px;display:flex;gap:6px"><button class="ico" id="ai-save">СОХРАНИТЬ</button><button class="ico" id="ai-log">ЛОГ ОТВЕТОВ</button></div>`
+    + `<h5 style="margin-top:10px">ЛИЧНЫЙ ЧАТ</h5><div id="ai-chathost"></div>`;
+  mvDetail(html, backFn);
+  agentChat($("#ai-chathost"), "ai:" + aid, "написать " + (a.name || "ИИ") + "…");
+  $("#ai-save").onclick = async () => { await api("/api/core/ai/" + aid, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: $("#ai-name").value, role: $("#ai-role").value, model: $("#ai-model").value, system: $("#ai-sys").value, active: $("#ai-act").checked }) }); toast("Сохранено"); };
+  $("#ai-log").onclick = async () => { const h = await api("/api/chat/history?session_id=" + encodeURIComponent(sid)); const box = $("#ai-chathost"); box.innerHTML = (h.messages || []).map((m) => `<div class="msg ${m.role === "user" ? "me" : "ai"}">${esc(m.content)}</div>`).join("") || "<div class='empty'>лог пуст</div>"; };
+}
 function openCore() {
   mvOpen("ЯДРО", "оркестратор + совет моделей");
-  const core = () => api("/api/core");
+  async function rOverview(b) {
+    let m = {}, council = [], tasks = 0, ideas = 0, c = {};
+    try { m = await api("/api/systems/metrics"); } catch (e) {}
+    try { council = (await api("/api/core/council")).council || []; } catch (e) {}
+    try { tasks = ((await api("/api/tasks")).tasks || []).filter((x) => x.status === "pending" || x.status === "running").length; } catch (e) {}
+    try { ideas = ((await api("/api/ideas")).ideas || []).length; } catch (e) {}
+    try { c = await api("/api/core"); } catch (e) {}
+    const work = council.filter((x) => x.ok === true).length;
+    b.innerHTML = `<div class="syswrap">`
+      + `<div class="card"><h5>ЯДРО</h5><div class="row"><span>статус</span><span class="chip">${esc(c.status)}</span></div><div class="row"><span>версия</span><span>${esc(c.version)}</span></div><div class="row"><span>Governor</span><span>${esc(c.governor)}</span></div><div class="row"><span>оркестратор</span><span>${esc(c.model)}</span></div></div>`
+      + `<div class="card"><h5>ХОСТ (live)</h5><div class="row"><span>CPU</span><span>${m.cpu ?? "?"}%</span></div><div class="bar"><i style="width:${Math.min(100, m.cpu || 0)}%"></i></div><div class="row"><span>RAM</span><span>${m.ram ?? "?"}%</span></div><div class="bar"><i style="width:${m.ram || 0}%"></i></div><div class="row"><span>uptime</span><span>${esc(m.uptime || "?")}</span></div></div>`
+      + `<div class="card"><h5>СОВЕТ (${work}/${council.length} работает)</h5>${council.map((x) => `<div class="row"><span>${esc(x.name)}</span><span>${x.ok === true ? "✓" : (x.enabled ? "✗" : "—")}${x.active ? "" : " (откл)"}</span></div>`).join("")}</div>`
+      + `<div class="card"><h5>СИСТЕМА</h5><div class="row"><span>модулей</span><span>${modules.length}</span></div><div class="row"><span>активных задач</span><span>${tasks}</span></div><div class="row"><span>идей</span><span>${ideas}</span></div></div>`
+      + `</div>`;
+  }
+  async function rCouncil(b) {
+    b.innerHTML = "<div class='empty'>проверяю модели (пинг)…</div>";
+    const r = await api("/api/core/council"); const cl = r.council || [];
+    const stat = (m) => m.ok === true ? "✓ работает" : (m.ok === false ? ("✗ " + esc((m.error || "не отвечает").slice(0, 36))) : (m.enabled ? "проверяю" : "нет ключа"));
+    b.innerHTML = `<h5>МОДЕЛИ СОВЕТА — работают ${cl.filter((m) => m.ok === true).length}/${cl.length}</h5>`
+      + cl.map((m) => `<div class="mvcard"><div class="row"><span><b>${esc(m.name)}</b> <span class="chip">${esc(m.model)}</span></span><span>${stat(m)}</span></div>${m.balance ? `<div class="m" style="opacity:.85">баланс: ${esc(m.balance)}</div>` : ""}<div style="margin-top:6px;display:flex;gap:6px;align-items:center">`
+        + (m.enabled ? `<button class="ico" data-tog="${esc(m.id)}" data-act="${m.active ? 0 : 1}">${m.active ? "ВЫКЛ из совета" : "ВКЛ в совет"}</button><span class="chip">${m.active ? "в совете" : "отключён"}</span>` : `<button class="ico" data-key="${esc(m.id)}">+ ДОБАВИТЬ КЛЮЧ</button>`)
+        + `</div></div>`).join("")
+      + `<div class="m" style="margin-top:8px;opacity:.7">Запрос идёт ко всем включённым (✓ работают) моделям параллельно; упавшие выбывают; Opus синтезирует. Статус — реальный пинг (кэш 5 мин). Серые без ключа — доступны к добавлению.</div>`;
+    b.querySelectorAll("[data-tog]").forEach((x) => x.onclick = async () => { await api(`/api/core/council/${x.getAttribute("data-tog")}/toggle`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ active: x.getAttribute("data-act") === "1" }) }); toast("Совет обновлён"); rCouncil(b); });
+    b.querySelectorAll("[data-key]").forEach((x) => x.onclick = async () => { const k = prompt("API-ключ для " + x.getAttribute("data-key") + ":"); if (!k) return; toast("Сохраняю ключ, ядро перезапустится…"); try { await api(`/api/core/council/${x.getAttribute("data-key")}/key`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: k }) }); } catch (e) {} setTimeout(() => rCouncil(b), 7000); });
+  }
   mvTabset([
-    ["overview", "ОБЗОР", async (b) => { const c = await core(); b.innerHTML = `<div class="row"><span>имя</span><span>${esc(c.name)}</span></div><div class="row"><span>версия</span><span>${esc(c.version)}</span></div><div class="row"><span>статус</span><span class="chip">${esc(c.status)}</span></div><div class="row"><span>Governor</span><span>${esc(c.governor)}</span></div><div class="row"><span>оркестратор</span><span>${esc(c.model)}</span></div>` + (c.stats || []).map((x) => `<div class="row"><span>${esc(x.label)}</span><span>${esc(x.value)}</span></div>`).join(""); }],
-    ["council", "СОВЕТ", async (b) => {
-      b.innerHTML = "<div class='empty'>проверяю модели (пинг)…</div>";
-      const r = await api("/api/core/council"); const cl = r.council || [];
-      const live = cl.filter((m) => m.ok === true).length;
-      const stat = (m) => m.ok === true ? "✓ работает" : (m.ok === false ? ("✗ " + (m.error ? esc(m.error.slice(0, 40)) : "не отвечает")) : "ключ есть, не проверено");
-      b.innerHTML = `<h5>МОДЕЛИ СОВЕТА — работают ${live}/${cl.length}</h5>` + cl.map((m) => `<div class="row"><span>${esc(m.name)} <span class="chip">${esc(m.model)}</span></span><span>${stat(m)}</span></div>`).join("")
-        + `<h5 style="margin-top:12px">КАК РАБОТАЕТ</h5><div class="m" style="opacity:.88">Запрос идёт ко всем РАБОТАЮЩИМ моделям параллельно, у каждой свой таймаут. Кто завис/упал/опоздал — выбывает (не решает). Ответы выживших синтезирует Opus в один лучший. Любое действие — через Governor (ALLOW/CONFIRM/DENY/KILL + аудит).</div>`
-        + `<div class="m" style="margin-top:6px;opacity:.6">статус — реальный пинг моделей (кэш 5 мин)</div>`
-        + `<div style="margin-top:8px"><button class="ico" id="c-chat">ОТКРЫТЬ ЧАТ С СОВЕТОМ</button></div>`;
-      const cc = $("#c-chat"); if (cc) cc.onclick = () => { mv.classList.remove("on"); const t = document.querySelector(".tab[data-go=chat]"); if (t) t.click(); const cb = document.querySelector(".chtab[data-ch=council]"); if (cb) cb.click(); };
-    }],
-    ["ai", "4 ИИ", async (b) => { const c = await core(); b.innerHTML = (c.ai || []).map((a) => `<div class="mvcard"><b>${esc(a.name)}</b> <span class="chip">${esc(a.role)}</span> <span class="chip">${esc(a.status)}</span><div class="m">${esc(a.model)}</div></div>`).join("") || "<div class='empty'>—</div>"; }],
+    ["overview", "ОБЗОР", rOverview],
+    ["council", "СОВЕТ", rCouncil],
+    ["ai", "4 ИИ", async (b) => renderAiList(b)],
     ["chat", "ЧАТ С ЯДРОМ", async (b) => agentChat(b, "core", "сообщение ядру…")],
   ], "overview");
 }
@@ -268,16 +308,32 @@ function openModule(id) {
     ["chat", "ЧАТ-АГЕНТ", async (b) => agentChat(b, "module:" + id, "агенту " + id + "…")],
   ], "overview");
 }
+async function openBuildDetail(bid, backFn) {
+  const x = await api(`/api/modules/factory/build/${bid}`);
+  $("#mv-sub").textContent = (x.name || x.repo || bid);
+  const html = `<div class="row"><span>статус сборки</span><span class="chip">${esc(x.status)}</span></div>`
+    + `<div class="row"><span>прогресс</span><span>${x.progress || 0}%</span></div><div class="bar"><i style="width:${x.progress || 0}%"></i></div>`
+    + `<div class="row"><span>тип</span><span class="chip">${esc(x.kind)}</span></div>`
+    + `<div class="row"><span>кластер</span><span>${esc(x.cluster)}</span></div>`
+    + (x.repo ? `<div class="row"><span>репозиторий</span><span>${esc(x.repo)}</span></div>` : "")
+    + (x.purpose ? `<h5 style="margin-top:10px">ЧТО / ЗАЧЕМ / КУДА</h5><div class="m" style="opacity:.88">${esc(x.purpose)}</div>` : "")
+    + (x.reason ? `<h5 style="margin-top:10px">РЕЗУЛЬТАТ</h5><div class="m">${esc(x.reason)}</div>` : "")
+    + (x.log ? `<h5 style="margin-top:10px">ЛОГ СБОРКИ</h5><pre style="max-height:200px;overflow:auto;font-size:10px;border:1px solid rgba(127,127,127,.5);border-radius:4px;padding:6px;white-space:pre-wrap">${esc(x.log)}</pre>` : "")
+    + (x.status === "ready" && x.token ? `<div style="margin-top:10px"><button class="ico" id="bd-prom">ВНЕДРИТЬ (подтвердить)</button></div>` : "");
+  mvDetail(html, backFn);
+  const bp = $("#bd-prom"); if (bp) bp.onclick = async () => { const r = await api("/api/modules/factory/promote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: x.token }) }); toast(r.ok ? "Модуль создан" : ("Отказ: " + (r.reason || ""))); if (r.ok) setTimeout(loadModules, 4000); backFn(); };
+}
 function openFactory() {
   mvOpen("ФАБРИКА МОДУЛЕЙ", "C4 · автономная сборка (off-core) · заказ — в чате с агентом");
   const COLS = [["ОЧЕРЕДЬ", ["queued"]], ["СБОРКА", ["building"]], ["ГОТОВО", ["ready"]], ["ОШИБКА", ["failed"]]];
   async function render(b) {
     const q = await api("/api/modules/factory/queue"); const builds = q.builds || [];
     b.innerHTML = `<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><button class="ico" id="f-tick">СОБРАТЬ СЛЕДУЮЩИЙ СЕЙЧАС</button><button class="ico" id="f-ref">ОБНОВИТЬ</button><span class="m" style="opacity:.7">Заказать модуль — во вкладке «ЧАТ-АГЕНТ»: просто опиши, что нужно.</span></div>`
-      + `<div class="mvkb" style="grid-template-columns:repeat(4,1fr)">${COLS.map(([lbl, sts]) => { const here = builds.filter((x) => sts.includes(x.status)); return `<div><h4>${lbl} · ${here.length}</h4>${here.map((x) => `<div class="mvcard"><b>${esc(x.name || x.repo || x.id)}</b> <span class="chip">${esc(x.kind)}</span>${x.reason ? `<div class="m">${esc(x.reason)}</div>` : ""}${x.status === "ready" && x.token ? `<div style="margin-top:6px"><button class="ico" data-prom="${esc(x.token)}">ВНЕДРИТЬ</button></div>` : ""}</div>`).join("") || "<div class='empty'>—</div>"}</div>`; }).join("")}</div>`
+      + `<div class="mvkb" style="grid-template-columns:repeat(4,1fr)">${COLS.map(([lbl, sts]) => { const here = builds.filter((x) => sts.includes(x.status)); return `<div><h4>${lbl} · ${here.length}</h4>${here.map((x) => `<div class="mvcard" data-build="${esc(x.id)}" style="cursor:pointer"><b>${esc(x.name || x.repo || x.id)}</b> <span class="chip">${esc(x.kind)}</span><div class="bar" style="margin:4px 0 2px"><i style="width:${x.progress || 0}%"></i></div><div class="m">${x.progress || 0}%</div>${x.status === "ready" && x.token ? `<div style="margin-top:6px"><button class="ico" data-prom="${esc(x.token)}" onclick="event.stopPropagation()">ВНЕДРИТЬ</button></div>` : ""}</div>`).join("") || "<div class='empty'>—</div>"}</div>`; }).join("")}</div>`
       + `<h5 style="margin-top:12px">МОДУЛИ СЕЙЧАС (${modules.length})</h5>` + modules.map((m) => `<div class="row"><span>${esc(m.display_name || m.name)}</span><span class="chip">${esc(m.cluster)}</span></div>`).join("");
     $("#f-ref").onclick = () => render(b);
     $("#f-tick").onclick = async () => { toast("Фабрика собирает следующий из очереди…"); try { const r = await api("/api/modules/factory/tick", { method: "POST" }); toast(r.ran ? ("Сборка: " + (r.verdict || r.error || "")) : "очередь пуста"); } catch (e) { toast("ошибка сборки"); } render(b); };
+    b.querySelectorAll("[data-build]").forEach((c) => c.onclick = () => openBuildDetail(c.getAttribute("data-build"), () => render(b)));
     b.querySelectorAll("[data-prom]").forEach((c) => c.onclick = async () => { const r = await api("/api/modules/factory/promote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: c.getAttribute("data-prom") }) }); toast(r.ok ? "Модуль создан, ядро перезапущено" : ("Отказ: " + (r.reason || ""))); if (r.ok) setTimeout(loadModules, 4000); render(b); });
   }
   mvTabset([["queue", "КАНБАН СБОРОК", render], ["chat", "ЧАТ-АГЕНТ (заказать)", async (b) => agentChat(b, "module:factory", "опиши модуль, который нужен…")]], "queue");
@@ -519,18 +575,23 @@ async function pumpActivity() {
 //  TASKS — kanban + inspector ИНФО/ЛОГ/ВЕТВЬ/ЧАТ (live)
 // ====================================================================
 const TCOLS = { pending: "В ОЧЕРЕДИ", running: "В ПРОЦЕССЕ", done: "ГОТОВО", error: "ОШИБКА" };
-let tasksDoneOpen = false;
+let colOpen = {};
 async function loadTasks() {
   try {
     const d = await api("/api/tasks"); const t = d.tasks || [];
+    const CAP = 10;
     const card = (x) => `<div class="tk" data-task="${esc(x.id)}">${esc(x.kind || x.id)}<div class="bar" style="margin:4px 0 2px"><i style="width:${x.progress || 0}%"></i></div><div class="m" style="opacity:.6">${esc(x.status)} · ${x.progress || 0}% · ${esc((x.updated_at || x.created_at || "").slice(11, 16))}</div></div>`;
-    const ACT = [["pending", "В ОЧЕРЕДИ"], ["running", "В ПРОЦЕССЕ"], ["error", "ОШИБКА"]];
-    const kanban = `<div class="kb" style="grid-template-columns:repeat(3,1fr)">` + ACT.map(([k, lbl]) => { const here = t.filter((x) => x.status === k); return `<div class="kbcol"><h4>${lbl} · ${here.length}</h4>${here.map(card).join("") || "<div class='empty'>—</div>"}</div>`; }).join("") + `</div>`;
-    const done = t.filter((x) => x.status === "done");
-    const doneSec = `<div style="margin-top:14px"><button class="ico" id="done-tog">ВЫПОЛНЕНО (${done.length}) ${tasksDoneOpen ? "▾" : "▸"}</button>${tasksDoneOpen ? `<div class="kb" style="grid-template-columns:repeat(3,1fr);margin-top:8px"><div class="kbcol">${done.map(card).join("") || "<div class='empty'>—</div>"}</div></div>` : ""}</div>`;
-    $("#tasks").innerHTML = kanban + doneSec;
+    const COLS = [["pending", "В ОЧЕРЕДИ"], ["running", "В ПРОЦЕССЕ"], ["done", "ВЫПОЛНЕНО"], ["error", "ОШИБКА"]];
+    $("#tasks").innerHTML = `<div class="kb" style="grid-template-columns:repeat(4,1fr)">` + COLS.map(([k, lbl]) => {
+      const here = t.filter((x) => x.status === k); const open = !!colOpen[k];
+      const shown = open ? here : here.slice(0, CAP); const more = here.length - shown.length;
+      let btn = "";
+      if (more > 0) btn = `<button class="ico kbmore" data-col="${k}">развернуть ещё ${more} ▾</button>`;
+      else if (open && here.length > CAP) btn = `<button class="ico kbmore" data-col="${k}">свернуть ▴</button>`;
+      return `<div class="kbcol"><h4>${lbl} · ${here.length}</h4><div class="kbscroll">${shown.map(card).join("") || "<div class='empty'>—</div>"}${btn}</div></div>`;
+    }).join("") + `</div>`;
     $("#tasks").querySelectorAll("[data-task]").forEach((c) => c.onclick = () => openTaskInspector(c.getAttribute("data-task")));
-    const dt = $("#done-tog"); if (dt) dt.onclick = () => { tasksDoneOpen = !tasksDoneOpen; loadTasks(); };
+    $("#tasks").querySelectorAll("[data-col]").forEach((c) => c.onclick = () => { const k = c.getAttribute("data-col"); colOpen[k] = !colOpen[k]; loadTasks(); });
     const act = t.filter((x) => x.status === "running" || x.status === "pending").length;
     const tab = document.querySelector(".tab[data-go=tasks]"); if (tab) tab.textContent = act ? `ЗАДАЧИ (${act})` : "ЗАДАЧИ";
   } catch (e) { $("#tasks").innerHTML = "<div class='empty'>нет связи с ядром</div>"; }
@@ -549,11 +610,13 @@ function openTaskInspector(id) {
         + (t.payload ? `<h5 style="margin-top:9px">ПЛАН</h5><div class="m" style="opacity:.88;white-space:pre-wrap">${esc(t.payload)}</div>` : "")
         + (t.result ? `<div class="m" style="margin-top:7px">РЕЗУЛЬТАТ: ${esc(t.result)}</div>` : "")
         + (t.error ? `<div class="m" style="margin-top:7px;color:#ff7a6b">ОШИБКА: ${esc(t.error)}</div>` : "")
-        + `<div style="margin-top:10px;display:flex;gap:6px">`
+        + `<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">`
+        + (done ? "" : `<button class="ico" id="t-run">▶ ВЫПОЛНИТЬ СЕЙЧАС</button>`)
         + (done ? "" : `<button class="ico" id="t-cancel">ОТМЕНИТЬ</button>`)
         + (err ? `<button class="ico" id="t-retry">ПОВТОРИТЬ</button>` : "")
         + `<button class="ico" id="t-del" style="border-color:#ff7a6b;color:#ff7a6b">УДАЛИТЬ</button>`
         + `</div>`;
+      const tn = $("#t-run"); if (tn) tn.onclick = async () => { tn.textContent = "выполняется…"; try { await api(`/api/tasks/${id}/run`, { method: "POST" }); toast("Задача выполнена"); } catch (e) { toast("ошибка выполнения"); } await loadTasks(); openTaskInspector(id); };
       const tc = $("#t-cancel"); if (tc) tc.onclick = async () => { await api(`/api/tasks/${id}/cancel`, { method: "POST" }); toast("Задача отменена"); await loadTasks(); openTaskInspector(id); };
       const tr = $("#t-retry"); if (tr) tr.onclick = async () => { await api(`/api/tasks/${id}/retry`, { method: "POST" }); toast("Задача возвращена в очередь"); await loadTasks(); openTaskInspector(id); };
       const td = $("#t-del"); if (td) td.onclick = async () => { await api(`/api/tasks/${id}/delete`, { method: "POST" }); toast("Задача удалена"); insp.classList.remove("open"); await loadTasks(); };
@@ -645,7 +708,7 @@ function openIdeaDetail(id, backFn) {
     const isRepo = (i.text || "").startsWith("[repo]") || (x && x.source === "repo");
     html += `<div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap"><button class="ico" id="d-an">РАЗОБРАТЬ ГЛУБЖЕ</button>`
       + (isRepo ? `<button class="ico" id="d-wrap">СОБРАТЬ ОБЁРТКУ</button>` : "")
-      + `<button class="ico" id="d-acc">ПРИНЯТЬ</button><button class="ico" id="d-rej">ОТКАЗАТЬ</button></div><div id="d-out" style="margin-top:8px"></div>`;
+      + `<button class="ico" id="d-si">В САМОУЛУЧШЕНИЕ</button><button class="ico" id="d-acc">ПРИНЯТЬ</button><button class="ico" id="d-rej">ОТКАЗАТЬ</button></div><div id="d-out" style="margin-top:8px"></div>`;
     b.innerHTML = html;
     $("#d-an").onclick = async () => { $("#d-out").innerHTML = "<div class='empty'>разбираю (клон + анализ)… минуту</div>"; await api(`/api/ideas/${id}/analyze`, { method: "POST" }); toast("Разбор обновлён"); render(b); };
     $("#d-acc").onclick = async () => { const r = await api(`/api/ideas/${id}/accept`, { method: "POST" }); toast("Принято → задача " + (r.task_id || "").slice(0, 8)); await loadIdeas(); render(b); };
@@ -777,7 +840,7 @@ function renderDrafts() {
 function switchChannel(c) {
   ch = c; localStorage.setItem("noir.ch", c); drafts = [];
   document.querySelectorAll(".chtab").forEach((b) => b.classList.toggle("on", b.dataset.ch === c));
-  $("#msg").placeholder = c === "mediator" ? "реплика… (Enter — в буфер, кнопка — собрать и отправить ядру)"
+  $("#msg").placeholder = c === "mediator" ? "сообщение Передатчику — он сформирует задачу ядру и вернёт суть…"
     : c === "claude_code" ? "вопрос Claude Code…" : c === "council" ? "вопрос совету (Opus+DeepSeek+Gemini)…" : "сообщение ядру…";
   $("#send").textContent = c === "mediator" ? "⮞" : "→";
   renderDrafts(); renderChat();
@@ -809,11 +872,7 @@ async function sendChat() {
   $("#chatlog").scrollTop = 1e9;
 }
 $("#send").onclick = sendChat;
-$("#msg").addEventListener("keydown", (e) => {
-  if (e.key !== "Enter") return;
-  if (ch === "mediator") { const v = e.target.value.trim(); if (v) { drafts.push(v); e.target.value = ""; renderDrafts(); } }
-  else sendChat();
-});
+$("#msg").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
 switchChannel(ch);
 
 // ---- voice equalizer (real mic audio, WebAudio AnalyserNode) ----

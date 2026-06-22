@@ -213,6 +213,11 @@ async def chat(body: ChatIn):
     tgt_sys = _target_system(target)
     if target.startswith("idea:"):
         tgt_sys = await _idea_system(target.split(":", 1)[1])
+    if target.startswith("ai:"):
+        from app.core import core_ai
+        a = core_ai.get_ai(target.split(":", 1)[1])
+        tgt_sys = (f"Ты — {a.get('name', 'агент')} ({a.get('role', '')}) ядра Black Noir. {a.get('system', '')} "
+                   "Отвечай кратко, по-русски, в рамках своей роли.") if a else "Ты — агент ядра Black Noir."
     # module/task/idea threads get their OWN agent + persistent per-target memory
     sid = body.session_id or (f"agent:{target}" if tgt_sys else str(uuid.uuid4()))
     await _ensure_session(sid)
@@ -248,6 +253,12 @@ async def chat(body: ChatIn):
     await _save(sid, "assistant", out.reply)
     await _maybe_summarize(sid)
     return out
+
+
+@router.get("/chat/history")
+async def chat_history(session_id: str, limit: int = 40):
+    """Message history of a session (e.g. an AI agent's answer log)."""
+    return {"session_id": session_id, "messages": await _history(session_id, limit)}
 
 
 @router.get("/chat/summary")

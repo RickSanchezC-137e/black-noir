@@ -82,6 +82,19 @@ async def delete_task(task_id: str):
     return {"ok": True, "deleted": task_id}
 
 
+@router.post("/{task_id}/run")
+async def run_now(task_id: str):
+    """Start executing this task immediately (out of queue) — for important ones."""
+    from app.core import runner
+    return await runner.run_task(task_id)
+
+
+@router.post("/run-next")
+async def run_next():
+    from app.core import runner
+    return await runner.tick()
+
+
 @router.post("/{task_id}/cancel")
 async def cancel(task_id: str):
     return await _set_status(task_id, "error")

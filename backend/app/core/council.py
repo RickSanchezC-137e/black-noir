@@ -36,7 +36,7 @@ async def _one(pid: str, system: str, message: str, history) -> dict:
 async def deliberate(message: str, history: list[dict] | None = None) -> dict:
     """Returns {reply, members, synth}. members = per-model {provider, ok, ms, ...}."""
     system = claude.SYSTEM.format(name=settings.project_name)
-    enabled = [m["id"] for m in providers.roster() if m["enabled"]]
+    enabled = [m["id"] for m in providers.roster() if m["enabled"] and m["active"]]
     results = await asyncio.gather(*[_one(pid, system, message, history) for pid in enabled])
     ok = [r for r in results if r["ok"] and r.get("text")]
     if not ok:

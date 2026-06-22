@@ -165,6 +165,21 @@ async def idea_detail(idea_id: str):
     return await intake_svc.get_detail(idea_id)
 
 
+@router.post("/{idea_id}/selfimprove")
+async def idea_to_selfimprove(idea_id: str):
+    """Hand a good idea to the self-improvement contour (creates a grounded hypothesis)."""
+    import aiosqlite
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        r = await (await db.execute("SELECT text FROM ideas WHERE id=?", (idea_id,))).fetchone()
+    if not r:
+        raise HTTPException(404, "idea not found")
+    from app.core import selfimprove
+    sc = await selfimprove.scout(f"из идеи: {r['text']}", domain="modules",
+                                 target_module="mcp_fs", source="idea", kind="capability")
+    return {"ok": True, "hypothesis": sc.get("id") or sc.get("hypothesis_id"), "status": sc.get("status", "queued")}
+
+
 @router.post("/{idea_id}/analyze")
 async def idea_analyze(idea_id: str):
     """Deep-dive: what/why/structure/where-to-integrate/license/security + readiness."""

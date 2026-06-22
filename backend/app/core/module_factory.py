@@ -95,18 +95,24 @@ def request_build(*, kind: str = "spec", name: str = "", cluster: str = "C6", pu
     import uuid
     bid = "build_" + uuid.uuid4().hex[:10]
     con = _sq.connect(str(_settings.sqlite_path)); con.execute(_QTABLE)
-    con.execute("INSERT INTO module_builds(id,kind,name,cluster,purpose,tools,repo,status,created_at,updated_at)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?)",
+    con.execute("INSERT INTO module_builds(id,kind,name,cluster,purpose,tools,repo,status,progress,created_at,updated_at)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (bid, kind, name or (repo.split("/")[-1] if repo else ""), cluster, purpose,
-                 json.dumps(tools or []), repo, "queued", _now(), _now()))
+                 json.dumps(tools or []), repo, "queued", 0, _now(), _now()))
     con.commit(); con.close()
     return {"id": bid, "status": "queued", "kind": kind}
+
+
+def get_build(bid: str) -> dict:
+    con = _sq.connect(str(_settings.sqlite_path)); con.row_factory = _sq.Row; con.execute(_QTABLE)
+    r = con.execute("SELECT * FROM module_builds WHERE id=?", (bid,)).fetchone(); con.close()
+    return dict(r) if r else {}
 
 
 def list_builds(limit: int = 30) -> list[dict]:
     con = _sq.connect(str(_settings.sqlite_path)); con.row_factory = _sq.Row; con.execute(_QTABLE)
     rows = [dict(r) for r in con.execute(
-        "SELECT id,kind,name,cluster,repo,status,token,verdict,reason,updated_at"
+        "SELECT id,kind,name,cluster,purpose,repo,status,progress,token,verdict,reason,updated_at"
         " FROM module_builds ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()]
     con.close(); return rows
 
@@ -126,7 +132,7 @@ async def tick() -> dict:
     con.close()
     if not row:
         return {"ran": False, "reason": "очередь пуста"}
-    b = dict(row); _set(b["id"], status="building")
+    b = dict(row); _set(b["id"], status="building", progress=50)
     try:
         if b["kind"] == "repo" and b["repo"]:
             from app.core import adoption
@@ -135,10 +141,11 @@ async def tick() -> dict:
             r = await build_module(b["name"], cluster=b["cluster"] or "C6", purpose=b["purpose"] or "",
                                    tools=json.loads(b["tools"] or "[]"))
         v = r.get("verdict")
+        log = (r.get("builder", {}) or {}).get("summary", "") or r.get("diff_stat", "") or ""
         if v == "ready":
-            _set(b["id"], status="ready", token=r.get("token", ""), verdict=v, reason=r.get("reason", ""))
+            _set(b["id"], status="ready", progress=100, token=r.get("token", ""), verdict=v, reason=r.get("reason", ""), log=log)
         else:
-            _set(b["id"], status="failed", verdict=v or "failed", reason=r.get("reason", ""))
+            _set(b["id"], status="failed", progress=100, verdict=v or "failed", reason=r.get("reason", ""), log=log)
         return {"ran": True, "id": b["id"], "verdict": v, "module": r.get("module_id")}
     except Exception as e:  # noqa: BLE001
-        _set(b["id"], status="failed", reason=str(e)[:160]); return {"ran": True, "id": b["id"], "error": str(e)}
+        _set(b["id"], status="failed", progress=100, reason=str(e)[:160]); return {"ran": True, "id": b["id"], "error": str(e)}

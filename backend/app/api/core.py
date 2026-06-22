@@ -5,6 +5,7 @@ import sys
 import time
 
 from fastapi import APIRouter
+from pydantic import BaseModel as _BM
 
 from app.config import settings
 from app.core.governor import governor
@@ -56,6 +57,80 @@ async def core_council():
     return {"council": await providers.live_status()}
 
 
+class _ToggleIn(_BM):
+    active: bool = True
+
+
+class _KeyIn(_BM):
+    key: str
+    model: str = ""
+
+
+@router.post("/core/council/{pid}/toggle")
+async def council_toggle(pid: str, body: _ToggleIn):
+    from app.core import providers
+    return providers.set_active(pid, body.active)
+
+
+@router.post("/core/council/{pid}/key")
+async def council_key(pid: str, body: _KeyIn):
+    """Add/replace a provider API key (→ secrets/.env) and restart to load it."""
+    import re as _re
+    import subprocess as _sp
+    from app.core import providers
+    c = next((x for x in providers.CATALOG if x["id"] == pid), None)
+    if not c:
+        return {"ok": False, "reason": "unknown provider"}
+    env = c["env"]
+    sec = "/home/jarvis/noir/secrets/.env"
+    cur = _sp.run(["cat", sec], capture_output=True, text=True).stdout
+    lines = cur.splitlines(); setk = {env: body.key.strip()}
+    if body.model:
+        setk[env.replace("_API_KEY", "_MODEL")] = body.model.strip()
+    for k, v in setk.items():
+        if any(_re.match(rf"^{k}=", ln) for ln in lines):
+            lines = [f"{k}={v}" if _re.match(rf"^{k}=", ln) else ln for ln in lines]
+        else:
+            lines.append(f"{k}={v}")
+    open(sec, "w").write("\n".join(lines) + "\n")
+    _sp.run(["sudo", "systemctl", "restart", "noir-core.service"], capture_output=True, timeout=60)
+    return {"ok": True, "provider": pid, "note": "ключ сохранён, ядро перезапущено"}
+
+
+class _AiUpd(_BM):
+    name: str = ""
+    role: str = ""
+    model: str = ""
+    system: str = ""
+    active: bool | None = None
+
+
+class _AiNew(_BM):
+    name: str
+    role: str = "agent"
+    model: str = ""
+    system: str = ""
+
+
+@router.get("/core/ai")
+async def core_ai_list():
+    from app.core import core_ai
+    return {"ai": core_ai.list_ai()}
+
+
+@router.post("/core/ai")
+async def core_ai_add(body: _AiNew):
+    from app.core import core_ai
+    return core_ai.add_ai(body.name, role=body.role, model=body.model, system=body.system)
+
+
+@router.post("/core/ai/{aid}")
+async def core_ai_update(aid: str, body: _AiUpd):
+    from app.core import core_ai
+    return core_ai.update_ai(aid, name=body.name or None, role=body.role or None,
+                             model=body.model or None, system=body.system or None, active=body.active)
+
+
 @router.get("/systems")
 async def systems():
     """Real hardware profile (Rule 7) — never demo data."""
@@ -79,7 +154,6 @@ async def uptime():
     return {"uptime_seconds": time.time() - _START}
 
 
-from pydantic import BaseModel as _BM
 
 
 class _PwIn(_BM):
