@@ -3,13 +3,23 @@ from __future__ import annotations
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.core import claude
+from app.core import claude, webauth
 
 router = APIRouter()
 
 
+async def _authed(ws: WebSocket) -> bool:
+    """Reject the handshake unless the owner session cookie is valid."""
+    if webauth.valid(ws.cookies.get(webauth.COOKIE)):
+        return True
+    await ws.close(code=1008)  # policy violation
+    return False
+
+
 @router.websocket("/ws/chat")
 async def ws_chat(ws: WebSocket):
+    if not await _authed(ws):
+        return
     await ws.accept()
     try:
         while True:
@@ -29,6 +39,8 @@ async def ws_chat(ws: WebSocket):
 
 
 async def _hold(ws: WebSocket, name: str):
+    if not await _authed(ws):
+        return
     await ws.accept()
     try:
         await ws.send_json({"type": "hello", "data": name})

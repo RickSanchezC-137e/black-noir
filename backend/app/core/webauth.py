@@ -1,44 +1,98 @@
-"""Web auth management — change the Caddy basic_auth password from the desktop/web.
+"""Web auth — app-level owner login (replaces Caddy basic_auth's ugly native popup).
 
-The owner login lives in /etc/caddy/Caddyfile (basic_auth). Changing the password
-re-hashes via `caddy hash-password`, rewrites the Caddyfile line(s) and reloads
-Caddy. Runs behind the existing auth gate (only the owner reaches the endpoint).
+Credentials live in secrets/webauth.json ({login, bcrypt hash}); seeded on first
+use from the previous Caddy hash so the existing password keeps working. Sessions
+are stateless: an HMAC-signed token (api_secret_key) stored in an HttpOnly cookie.
+The /api gate + WS handshakes verify it; the login UI is a Fallout-styled overlay.
 """
 from __future__ import annotations
 
-import os
-import re
-import subprocess
-import tempfile
+import base64
+import hashlib
+import hmac
+import json
+import time
+from pathlib import Path
 
-CADDY = "/etc/caddy/Caddyfile"
-LOGIN = "Rick"
-_CADDY_BIN = "/usr/bin/caddy"
+import bcrypt
+
+from app.config import settings
+
+_CREDS = Path(__file__).resolve().parents[3] / "secrets" / "webauth.json"
+_DEFAULT_LOGIN = "Rick"
+# Seed = the password that was already in use (carried over from Caddy basic_auth).
+_SEED_HASH = "$2a$14$lO0aPiALB5ULC3FjqkzSMufmEkuQia1CeLWoaNoM9fBzen4g.Ux0m"
+TOKEN_TTL = 30 * 24 * 3600  # 30 days
+COOKIE = "noir_session"
 
 
-def set_password(new: str) -> dict:
+def _load() -> dict:
+    if _CREDS.exists():
+        try:
+            return json.loads(_CREDS.read_text())
+        except (ValueError, OSError):
+            pass
+    d = {"login": _DEFAULT_LOGIN, "hash": _SEED_HASH}
+    _save(d)
+    return d
+
+
+def _save(d: dict) -> None:
+    _CREDS.parent.mkdir(parents=True, exist_ok=True)
+    _CREDS.write_text(json.dumps(d))
+    try:
+        _CREDS.chmod(0o600)
+    except OSError:
+        pass
+
+
+def current_login() -> str:
+    return _load()["login"]
+
+
+def verify(login: str, password: str) -> bool:
+    d = _load()
+    if (login or "") != d["login"]:
+        return False
+    try:
+        return bcrypt.checkpw(password.encode(), d["hash"].encode())
+    except (ValueError, TypeError):
+        return False
+
+
+def set_password(new: str, login: str | None = None) -> dict:
     if not new or len(new) < 6:
         return {"ok": False, "reason": "пароль слишком короткий (мин. 6 символов)"}
+    d = _load()
+    d["hash"] = bcrypt.hashpw(new.encode(), bcrypt.gensalt(rounds=12)).decode()
+    if login and login.strip():
+        d["login"] = login.strip()
+    _save(d)
+    return {"ok": True, "login": d["login"], "note": "пароль изменён — войдите заново при следующем входе"}
+
+
+# ---- stateless session token (HMAC) ----
+
+def _secret() -> bytes:
+    return (settings.api_secret_key or "noir-dev-secret-change-me").encode()
+
+
+def issue(login: str) -> str:
+    msg = f"{login}.{int(time.time()) + TOKEN_TTL}"
+    sig = hmac.new(_secret(), msg.encode(), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{msg}.{sig}".encode()).decode()
+
+
+def valid(token: str | None) -> str | None:
+    """Return the login if the token is authentic and unexpired, else None."""
+    if not token:
+        return None
     try:
-        h = subprocess.run([_CADDY_BIN, "hash-password", "--plaintext", new],
-                           capture_output=True, text=True, timeout=30).stdout.strip()
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "reason": f"хэширование не удалось: {e}"}
-    if not h.startswith("$2"):
-        return {"ok": False, "reason": "не удалось получить хэш"}
-    cur = subprocess.run(["sudo", "cat", CADDY], capture_output=True, text=True, timeout=15).stdout
-    if "basic_auth" not in cur:
-        return {"ok": False, "reason": "basic_auth не найден в Caddyfile"}
-    new_cfg = re.sub(r"(?m)^\s*" + re.escape(LOGIN) + r" \$2[aby]\$\S+", f"\t\t{LOGIN} {h}", cur)
-    tf = tempfile.NamedTemporaryFile("w", delete=False, suffix=".caddy")
-    tf.write(new_cfg); tf.close()
-    try:
-        cp = subprocess.run(["sudo", "cp", tf.name, CADDY], capture_output=True, text=True, timeout=15)
-        if cp.returncode != 0:
-            return {"ok": False, "reason": f"запись Caddyfile: {cp.stderr[:150]}"}
-        rl = subprocess.run(["sudo", "systemctl", "reload", "caddy"], capture_output=True, text=True, timeout=30)
-        if rl.returncode != 0:
-            return {"ok": False, "reason": f"reload caddy: {rl.stderr[:150]}"}
-    finally:
-        os.unlink(tf.name)
-    return {"ok": True, "login": LOGIN, "note": "пароль изменён — войдите заново при следующем запросе"}
+        raw = base64.urlsafe_b64decode(token.encode()).decode()
+        login, exp, sig = raw.rsplit(".", 2)
+        if int(exp) < time.time():
+            return None
+        good = hmac.new(_secret(), f"{login}.{exp}".encode(), hashlib.sha256).hexdigest()
+        return login if hmac.compare_digest(good, sig) else None
+    except (ValueError, TypeError):
+        return None

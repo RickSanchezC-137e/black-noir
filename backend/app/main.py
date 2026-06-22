@@ -37,11 +37,30 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=f"{settings.project_name} core", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# Owner auth gate: every /api/* (except the auth endpoints) needs a valid session
+# cookie. Static frontend assets are NOT secret and stay open so the login overlay
+# can load; all real data flows through /api + /ws, which are gated. (WS handshakes
+# are checked inside app/api/ws.py — middleware doesn't see websocket scopes.)
+from starlette.responses import JSONResponse  # noqa: E402
+from app.core import webauth  # noqa: E402
+
+_AUTH_OPEN = {"/api/auth/login", "/api/auth/logout", "/api/auth/me"}
+
+
+@app.middleware("http")
+async def _auth_gate(request, call_next):
+    p = request.url.path
+    if p.startswith("/api/") and p not in _AUTH_OPEN:
+        if not webauth.valid(request.cookies.get(webauth.COOKIE)):
+            return JSONResponse({"detail": "auth required"}, status_code=401)
+    return await call_next(request)
+
+
 # routers (imported after app to avoid cycles)
-from app.api import (chat, core, governor, ideas, memory,  # noqa: E402
+from app.api import (auth, chat, core, governor, ideas, memory,  # noqa: E402
                      modules, selfimprove, tasks, visual, ws)
 
-for r in (core.router, chat.router, memory.router, governor.router, modules.router,
+for r in (auth.router, core.router, chat.router, memory.router, governor.router, modules.router,
           ideas.router, tasks.router, selfimprove.router, visual.router, ws.router):
     app.include_router(r)
 

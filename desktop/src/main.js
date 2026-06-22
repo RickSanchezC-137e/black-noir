@@ -12,6 +12,38 @@ if (!isTauri && "serviceWorker" in navigator) {
 const API = (params.get("api") || window.NOIR_API_BASE || (window.__VITE_API_BASE__) ||
   (isTauri ? "https://jarvisgod.duckdns.org" : "")).replace(/\/$/, "");   // "" = same-origin (browser)
 const WS = API ? API.replace(/^http/, "ws") : (location.origin.replace(/^http/, "ws"));
+
+// ===== Owner auth — Fallout/Pip-Boy login overlay (replaces native basic_auth popup) =====
+(function initAuth() {
+  const ov = document.getElementById("login"); if (!ov) return;
+  const boot = document.getElementById("lboot"), msg = document.getElementById("lg-msg");
+  const lines = ["ИНИЦИАЛИЗАЦИЯ ROBCO INDUSTRIES(TM) MF BOOT AGENT v2.3.0",
+    "RETROS BIOS 4.02.08.00 52EE5.E7.E8", "(C) ROBCO INDUST. — UNAUTHORISED ACCESS PROHIBITED",
+    "КАНАЛ: jarvisgod.duckdns.org .......... [ OK ]", "SET TERMINAL/INQUIRE",
+    ">>> ЗАЩИЩЁННЫЙ СЕАНС УСТАНОВЛЕН"];
+  let li = 0, ci = 0;
+  function type() {
+    if (li >= lines.length) return;
+    const ln = lines[li];
+    boot.textContent = lines.slice(0, li).join("\n") + (li ? "\n" : "") + ln.slice(0, ci);
+    if (ci < ln.length) { ci++; setTimeout(type, 11); }
+    else { li++; ci = 0; setTimeout(type, 85); }
+  }
+  const show = () => { ov.classList.remove("hidden"); type(); const u = document.getElementById("lg-user"); if (u) u.focus(); };
+  const hide = () => ov.classList.add("hidden");
+  fetch(API + "/api/auth/me").then((r) => r.json()).then((d) => { d && d.authed ? hide() : show(); }).catch(show);
+  document.getElementById("lform").addEventListener("submit", async (e) => {
+    e.preventDefault(); msg.className = "lmsg"; msg.textContent = "> ПРОВЕРКА ДОСТУПА…";
+    const login = (document.getElementById("lg-user").value || "").trim();
+    const password = document.getElementById("lg-pass").value || "";
+    try {
+      const r = await fetch(API + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ login, password }) });
+      const d = await r.json();
+      if (d.ok) { msg.textContent = "> ДОСТУП РАЗРЕШЁН — ЗАГРУЗКА ТЕРМИНАЛА…"; setTimeout(() => location.reload(), 400); }
+      else { msg.className = "lmsg err"; msg.textContent = d.reason || "ДОСТУП ЗАПРЕЩЁН"; }
+    } catch (err) { msg.className = "lmsg err"; msg.textContent = "ОШИБКА СВЯЗИ С ТЕРМИНАЛОМ"; }
+  });
+})();
 const $ = (s) => document.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));

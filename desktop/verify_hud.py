@@ -17,8 +17,15 @@ from playwright.sync_api import sync_playwright
 ROOT = os.path.join(os.path.dirname(__file__), "dist")
 PORT = 8090
 API = sys.argv[2] if len(sys.argv) > 2 else "http://127.0.0.1:8000"
-HUD = sys.argv[1] if len(sys.argv) > 1 else f"http://127.0.0.1:{PORT}/index.html?api={API}"
+# App-level auth gates /api now → load the page SAME-ORIGIN from the core (so the
+# session cookie is sent) and inject a valid owner token into the browser context.
+HUD = sys.argv[1] if len(sys.argv) > 1 else f"{API}/index.html"
 OUT = os.path.join(os.path.dirname(__file__), "_verify")
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+from app.core import webauth  # noqa: E402
+
+TOKEN = webauth.issue(webauth.current_login())
 
 
 def serve():
@@ -35,7 +42,9 @@ def main() -> int:
     checks, errors = {}, []
     with sync_playwright() as p:
         b = p.chromium.launch(args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"])
-        pg = b.new_page(viewport={"width": 1280, "height": 800})
+        ctx = b.new_context(viewport={"width": 1280, "height": 800})
+        ctx.add_cookies([{"name": webauth.COOKIE, "value": TOKEN, "url": API}])
+        pg = ctx.new_page()
         pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         pg.goto(HUD)
         pg.wait_for_function("window.__noirReady === true", timeout=15000)
